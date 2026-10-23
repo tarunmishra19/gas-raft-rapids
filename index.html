@@ -1,0 +1,1214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Gas Raft Rapids</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@500;700;900&display=swap">
+<style>
+  /* Layout: one full-screen canvas, overlays stacked on top (title, lobby, HUD, result). Cartoon river look: deliberately single-theme (a game screen), colours set explicitly. */
+  :root {
+    --bg: #184a3c;
+    --water: #2d8fd5;
+    --water-deep: #1f6fb0;
+    --land: #7cc24a;
+    --land-dark: #5a9a35;
+    --wood: #c88a4a;
+    --wood-dark: #8d5a28;
+    --fart: #a8e63d;
+    --ink: #1b1b2a;
+    --paper: #fff6dc;
+    --paper-2: #ffe9b5;
+    --accent: #ff7a3d;
+    --accent-dark: #c74d17;
+    --danger: #e23d4f;
+    --font-display: 'Lilita One', 'Arial Black', Impact, sans-serif;
+    --font-body: 'Nunito', 'Segoe UI', system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-body);
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+  }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .overlay {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding-block: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    overflow-y: auto;
+    background: rgba(18, 48, 40, 0.55);
+  }
+  .card {
+    background: var(--paper);
+    border: 4px solid var(--ink);
+    border-radius: 22px;
+    box-shadow: 0 10px 0 var(--ink);
+    padding: 22px 22px 26px;
+    width: 100%; max-width: 520px;
+    display: grid; gap: 14px;
+    min-width: 0;
+  }
+  h1, h2 {
+    font-family: var(--font-display);
+    font-weight: 400; letter-spacing: 0.5px; line-height: 1;
+    margin: 0; text-wrap: balance; color: var(--accent-dark);
+    text-shadow: 3px 3px 0 var(--paper-2);
+  }
+  h1 { font-size: clamp(2.4rem, 9vw, 3.6rem); }
+  h2 { font-size: clamp(1.5rem, 6vw, 2.1rem); }
+  p { margin: 0; line-height: 1.45; }
+  .muted { color: #5c5a66; font-size: 0.92rem; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .row > * { min-width: 0; }
+  label { font-weight: 700; font-size: 0.9rem; }
+  input[type=text] {
+    font: inherit; font-weight: 700; font-size: 1.05rem;
+    padding: 10px 12px; border: 3px solid var(--ink); border-radius: 12px;
+    background: #fff; color: var(--ink); width: 100%; box-sizing: border-box;
+    text-transform: none;
+  }
+  input.code { text-transform: uppercase; letter-spacing: 0.25em; font-family: var(--font-display); font-size: 1.4rem; }
+  input:focus-visible, button:focus-visible { outline: 4px solid var(--water); outline-offset: 2px; }
+  button {
+    font-family: var(--font-display); font-size: 1.15rem; letter-spacing: 0.3px;
+    color: #fff; background: var(--accent);
+    border: 3px solid var(--ink); border-radius: 14px;
+    padding: 11px 18px; cursor: pointer;
+    box-shadow: 0 5px 0 var(--ink);
+    transition: transform 0.05s, box-shadow 0.05s;
+  }
+  button:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); }
+  button.secondary { background: var(--water); }
+  button.quiet { background: var(--paper-2); color: var(--ink); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .seg { display: flex; gap: 0; border: 3px solid var(--ink); border-radius: 12px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; box-shadow: none; background: #fff; color: var(--ink); padding: 8px 14px; }
+  .seg button + button { border-left: 3px solid var(--ink); }
+  .seg button[aria-pressed=true] { background: var(--fart); }
+  .seg button:active { transform: none; }
+  .code-big {
+    font-family: var(--font-display); font-size: clamp(2.6rem, 12vw, 4rem);
+    letter-spacing: 0.3em; text-align: center; background: #fff;
+    border: 3px dashed var(--ink); border-radius: 16px; padding: 8px 0 8px 0.3em;
+    font-variant-numeric: tabular-nums;
+  }
+  .seats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .seat {
+    border: 3px solid var(--ink); border-radius: 14px; padding: 10px 12px;
+    background: #fff; display: grid; gap: 4px; min-height: 58px;
+  }
+  .seat .who { display: flex; align-items: center; gap: 8px; font-weight: 900; }
+  .seat .dot { width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--ink); flex: none; }
+  .seat .pos { font-size: 0.8rem; color: #5c5a66; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; }
+  .seat.empty { background: var(--paper-2); color: #8a8795; border-style: dashed; }
+  .status { font-weight: 700; font-size: 0.9rem; color: var(--accent-dark); min-height: 1.3em; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; font-size: 0.95rem; }
+  kbd {
+    font-family: var(--font-display); font-size: 1rem; background: #fff; border: 3px solid var(--ink);
+    border-bottom-width: 5px; border-radius: 8px; padding: 2px 9px; min-width: 1.2em; text-align: center; display: inline-block;
+    color: var(--ink); text-shadow: none;
+  }
+  /* HUD */
+  #hud {
+    position: fixed; inset: 0; pointer-events: none;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    padding-left: max(12px, env(safe-area-inset-left, 0px));
+    padding-right: max(12px, env(safe-area-inset-right, 0px));
+    display: grid; grid-template-rows: auto 1fr auto; gap: 8px;
+    font-weight: 900; color: #fff; text-shadow: 0 2px 0 var(--ink), 0 0 6px rgba(0,0,0,0.4);
+  }
+  #hud .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  #hud .pill {
+    pointer-events: auto;
+    background: rgba(27, 27, 42, 0.75); border: 3px solid var(--ink); border-radius: 999px;
+    padding: 6px 14px; font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.4px;
+    font-variant-numeric: tabular-nums; text-shadow: none; display: inline-flex; align-items: center; gap: 10px;
+  }
+  .hull { width: 90px; height: 12px; border: 2px solid #fff; border-radius: 6px; overflow: hidden; background: rgba(255,255,255,0.15); }
+  .hull i { display: block; height: 100%; background: var(--fart); transition: width 0.15s; }
+  .hull i.low { background: var(--danger); }
+  #toast {
+    justify-self: center; align-self: start; margin-top: 8vh;
+    font-family: var(--font-display); font-size: clamp(1.4rem, 5vw, 2.4rem);
+    text-align: center; opacity: 0; transition: opacity 0.25s; text-wrap: balance; max-width: 90%;
+  }
+  #toast.show { opacity: 1; }
+  #hud .bottom {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 10px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .gas-list { display: flex; gap: 8px; flex-wrap: wrap; }
+  .gas {
+    background: rgba(27, 27, 42, 0.75); border: 3px solid var(--ink); border-radius: 12px; padding: 6px 10px;
+    display: grid; gap: 4px; min-width: 96px; text-shadow: none; font-size: 0.85rem;
+  }
+  .gas .name { display: flex; gap: 6px; align-items: center; }
+  .gas .dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #fff; }
+  .gas .bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.2); overflow: hidden; }
+  .gas .bar i { display: block; height: 100%; background: var(--fart); }
+  .gas.me { outline: 3px solid var(--fart); }
+  .hint { font-size: 0.85rem; background: rgba(27, 27, 42, 0.75); border-radius: 10px; padding: 6px 10px; text-shadow: none; max-width: 48vw; text-align: right; }
+  #touchzones { position: fixed; inset: 0; display: none; }
+  #touchzones .zone { position: absolute; }
+  .zone::after {
+    content: attr(data-label); position: absolute; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%); color: #fff; font-family: var(--font-display); font-size: 1.1rem;
+    text-shadow: 0 2px 0 var(--ink); opacity: 0.8; white-space: nowrap;
+  }
+  .zone.on { background: radial-gradient(circle at 50% 70%, rgba(168,230,61,0.35), transparent 60%); }
+  .result-time { font-family: var(--font-display); font-size: clamp(2.2rem, 10vw, 3.4rem); color: var(--water-deep); font-variant-numeric: tabular-nums; }
+  @media (max-width: 480px) { .seats { grid-template-columns: 1fr; } .card { padding: 18px 16px 22px; } }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="touchzones" aria-hidden="true"></div>
+
+<div id="hud" hidden>
+  <div class="top">
+    <div class="pill"><span id="hud-level">Course 1</span><span class="hull" title="Hull"><i id="hud-hull" style="width:100%"></i></span></div>
+    <div class="pill" id="hud-time">0:00.0</div>
+  </div>
+  <div id="toast"></div>
+  <div class="bottom">
+    <div class="gas-list" id="gas-list"></div>
+    <div class="hint" id="hud-hint"></div>
+  </div>
+</div>
+
+<div class="overlay" id="screen-title">
+  <div class="card">
+    <h1>Gas Raft Rapids</h1>
+    <p>Two to four of you share one raft. The only way to steer is to fart. Back seats push the raft forward, front seats brake, and farting from one side swings the raft toward the other. The secret is farting <strong>together</strong>, at the right moment.</p>
+    <div>
+      <label for="name">Your name</label>
+      <input type="text" id="name" maxlength="12" placeholder="Captain Toot" autocomplete="off">
+    </div>
+    <div class="row">
+      <label>Your colour</label>
+      <div class="seg" id="colour-pick" role="group" aria-label="Colour"></div>
+    </div>
+    <hr style="border:0;border-top:3px dashed var(--ink);opacity:0.25;margin:4px 0">
+    <h2>Play together on this device</h2>
+    <div class="row">
+      <label>Players</label>
+      <div class="seg" id="couch-count" role="group" aria-label="Player count">
+        <button type="button" data-n="2" aria-pressed="true">2</button>
+        <button type="button" data-n="3" aria-pressed="false">3</button>
+        <button type="button" data-n="4" aria-pressed="false">4</button>
+      </div>
+      <button type="button" id="btn-couch">Start couch game</button>
+    </div>
+    <p class="muted">One keyboard: <kbd>A</kbd> back left, <kbd>L</kbd> back right, <kbd>Q</kbd> front left, <kbd>P</kbd> front right. On a phone, each player taps their own part of the screen.</p>
+    <h2>Play online</h2>
+    <div class="row">
+      <button type="button" id="btn-host" class="secondary" disabled>Host a game</button>
+      <input type="text" id="join-code" class="code" maxlength="4" placeholder="CODE" autocomplete="off" style="width:8.5em;flex:none">
+      <button type="button" id="btn-join" class="secondary" disabled>Join</button>
+    </div>
+    <p class="status" id="online-status">Loading online play…</p>
+    <p class="muted">Send friends this page’s link and the four-letter code. Everyone presses <kbd>Space</kbd> or holds a finger on the screen.</p>
+  </div>
+</div>
+
+<div class="overlay" id="screen-lobby" hidden>
+  <div class="card">
+    <h2>Room code</h2>
+    <div class="code-big" id="lobby-code">····</div>
+    <p class="muted">Friends open this page’s link, type the code and press Join. Seats fill in the order people arrive.</p>
+    <div class="seats" id="lobby-seats"></div>
+    <div class="row">
+      <button type="button" id="btn-start" hidden>Set sail</button>
+      <button type="button" id="btn-leave" class="quiet">Leave</button>
+      <span class="status" id="lobby-status"></span>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="screen-result" hidden>
+  <div class="card">
+    <h2 id="result-title">Course complete!</h2>
+    <div class="result-time" id="result-time">1:23.4</div>
+    <p id="result-text"></p>
+    <div class="row">
+      <button type="button" id="btn-next">Next course</button>
+      <button type="button" id="btn-retry" class="secondary">Try again</button>
+      <button type="button" id="btn-menu" class="quiet">Back to title</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+// ---------- constants ----------
+const COLOURS = ['#ff5d8f', '#ffcc3d', '#4fd1ff', '#b47cff', '#4ade80', '#ff8a3d'];
+const SEAT_NAMES = ['Back left', 'Back right', 'Front left', 'Front right'];
+const SEAT_KEYS = ['a', 'l', 'q', 'p'];
+// Seat positions in raft-local units (raft forward is local -y). Back seats fart backward and push the raft forward.
+const SEAT_LOCAL = [[-0.62, 0.62], [0.62, 0.62], [-0.62, -0.62], [0.62, -0.62]];
+const SEAT_FART_DIR = [[0, 1], [0, 1], [0, -1], [0, -1]]; // direction the gas leaves the body
+const RAFT_HALF = 1.0;      // half-size in world metres
+const RAFT_RADIUS = 1.25;   // collision radius
+const THRUST = 3.6;         // metres/s^2 per farting seat (force / mass)
+const BURST = 1.1;          // velocity impulse (m/s) on the first frame of a fart
+const TORQUE_SCALE = 1.2;   // how much an off-centre fart spins the raft
+const GAS_DRAIN = 0.4;      // gas per second while farting
+const GAS_REGEN = 0.45;     // gas per second while resting
+const LINEAR_DRAG = 1.2;
+const ANGULAR_DRAG = 1.8;
+const MAX_HULL = 100;
+const SNAP_HZ = 15;
+const FIXED_DT = 1 / 60;
+
+// ---------- levels ----------
+// A course is a centreline of points with a half-width per point. The raft stays inside the channel.
+function makeLevels() {
+  const levels = [];
+  // Course 1: gentle warm-up with a couple of narrow pinches.
+  levels.push({
+    name: 'Course 1 · Lazy River',
+    path: [
+      [0, 0, 7], [0, -18, 7], [6, -34, 6], [18, -44, 5], [34, -46, 4.2], [48, -40, 5], [54, -26, 6],
+      [66, -14, 4], [82, -12, 5], [98, -20, 6], [108, -36, 6], [120, -50, 6],
+    ],
+    rocks: [[27, -45, 1.1], [60, -19, 1.0], [103, -26, 1.3]],
+    logs: [{ at: 0.62, span: 3.2, speed: 1.1, len: 3.4 }],
+    whirls: [],
+    checkpoints: [0.38, 0.72],
+  });
+  // Course 2: sharper turns, two logs, a whirlpool in a wide pool.
+  levels.push({
+    name: 'Course 2 · Toot Canyon',
+    path: [
+      [0, 0, 6], [0, -16, 5], [-10, -30, 4], [-8, -46, 3.6], [8, -56, 4], [24, -52, 4.4], [30, -38, 3.4],
+      [40, -26, 5], [58, -22, 7.5], [76, -30, 7.5], [88, -46, 4], [84, -64, 3.6], [96, -80, 4], [116, -84, 5],
+    ],
+    rocks: [[-9, -38, 0.9], [27, -45, 0.9], [60, -20, 1.2], [90, -72, 1.0]],
+    logs: [{ at: 0.3, span: 2.6, speed: 1.4, len: 3.0 }, { at: 0.84, span: 2.4, speed: 1.0, len: 3.6 }],
+    whirls: [{ at: 0.58, r: 5.5, pull: 3.2, spin: 2.6 }],
+    checkpoints: [0.3, 0.55, 0.8],
+  });
+  // Course 3: a long squeeze then a slalom of rocks.
+  levels.push({
+    name: 'Course 3 · The Big Squeeze',
+    path: [
+      [0, 0, 6], [0, -14, 5], [-6, -28, 3.2], [-6, -44, 3.0], [0, -58, 3.2], [12, -66, 4], [28, -66, 5.5],
+      [44, -62, 5.5], [58, -52, 5.5], [66, -36, 5], [80, -24, 5], [98, -22, 6], [114, -32, 6], [122, -50, 6],
+    ],
+    rocks: [[-3, -36, 0.8], [-9, -50, 0.8], [30, -64, 1.0], [40, -68, 1.0], [48, -58, 1.0], [56, -64, 1.0], [63, -45, 1.1], [86, -22, 1.1], [104, -28, 1.0]],
+    logs: [{ at: 0.2, span: 1.6, speed: 1.6, len: 2.2 }, { at: 0.72, span: 2.6, speed: 1.2, len: 3.2 }],
+    whirls: [{ at: 0.9, r: 6, pull: 3.8, spin: 3 }],
+    checkpoints: [0.28, 0.5, 0.75],
+  });
+  for (const lv of levels) prepareLevel(lv);
+  return levels;
+}
+
+function prepareLevel(lv) {
+  const pts = lv.path;
+  lv.cum = [0];
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i][0] - pts[i - 1][0], dy = pts[i][1] - pts[i - 1][1];
+    lv.cum.push(lv.cum[i - 1] + Math.hypot(dx, dy));
+  }
+  lv.length = lv.cum[lv.cum.length - 1];
+  lv.start = { x: pts[0][0], y: pts[0][1], a: Math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]) + Math.PI / 2 };
+  lv.finish = pointAt(lv, 0.985);
+  lv.checkpointPts = lv.checkpoints.map((t) => pointAt(lv, t));
+  for (const log of lv.logs) Object.assign(log, pointAt(lv, log.at));
+  for (const w of lv.whirls) Object.assign(w, pointAt(lv, w.at));
+}
+
+function pointAt(lv, t) {
+  const target = t * lv.length;
+  const pts = lv.path;
+  for (let i = 1; i < pts.length; i++) {
+    if (lv.cum[i] >= target) {
+      const f = (target - lv.cum[i - 1]) / (lv.cum[i] - lv.cum[i - 1]);
+      const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
+      const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy);
+      return {
+        x: ax + dx * f, y: ay + dy * f,
+        w: pts[i - 1][2] + (pts[i][2] - pts[i - 1][2]) * f,
+        nx: -dy / len, ny: dx / len, tx: dx / len, ty: dy / len,
+      };
+    }
+  }
+  const last = pts[pts.length - 1];
+  return { x: last[0], y: last[1], w: last[2], nx: 0, ny: 1, tx: 1, ty: 0 };
+}
+
+// Closest point on the channel: returns {dist, w, progress}.
+function channelQuery(lv, x, y) {
+  const pts = lv.path;
+  let best = { d2: Infinity };
+  for (let i = 1; i < pts.length; i++) {
+    const ax = pts[i - 1][0], ay = pts[i - 1][1], bx = pts[i][0], by = pts[i][1];
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy;
+    let f = ((x - ax) * dx + (y - ay) * dy) / l2;
+    f = Math.max(0, Math.min(1, f));
+    const px = ax + dx * f, py = ay + dy * f;
+    const d2 = (x - px) ** 2 + (y - py) ** 2;
+    if (d2 < best.d2) {
+      best = { d2, px, py, w: pts[i - 1][2] + (pts[i][2] - pts[i - 1][2]) * f, progress: (lv.cum[i - 1] + f * (lv.cum[i] - lv.cum[i - 1])) / lv.length };
+    }
+  }
+  best.dist = Math.sqrt(best.d2);
+  return best;
+}
+
+function logPosition(log, time) {
+  const s = Math.sin(time * log.speed) * (log.w - log.span * 0.5 - 0.2);
+  return { x: log.x + log.nx * s, y: log.y + log.ny * s, tx: log.tx, ty: log.ty, len: log.len };
+}
+
+// ---------- host simulation ----------
+const LEVELS = makeLevels();
+
+function newSim(levelIndex) {
+  const lv = LEVELS[levelIndex];
+  return {
+    level: levelIndex,
+    phase: 'lobby', // lobby | playing | won | sunk
+    time: 0,
+    raft: { x: lv.start.x, y: lv.start.y, a: lv.start.a, vx: 0, vy: 0, va: 0 },
+    hull: MAX_HULL,
+    checkpoint: -1,
+    seats: [null, null, null, null], // {id, name, colour, fart, gas, wasFarting}
+    events: [], // transient: {kind, x, y, strength}
+    bestProgress: 0,
+    resetAt: 0,
+  };
+}
+
+function placeAtCheckpoint(sim) {
+  const lv = LEVELS[sim.level];
+  const p = sim.checkpoint >= 0 ? lv.checkpointPts[sim.checkpoint] : null;
+  if (p) {
+    sim.raft.x = p.x; sim.raft.y = p.y; sim.raft.a = Math.atan2(p.ty, p.tx) + Math.PI / 2;
+  } else {
+    sim.raft.x = lv.start.x; sim.raft.y = lv.start.y; sim.raft.a = lv.start.a;
+  }
+  sim.raft.vx = sim.raft.vy = sim.raft.va = 0;
+  sim.hull = MAX_HULL;
+}
+
+function stepSim(sim, inputs, dt) {
+  const lv = LEVELS[sim.level];
+  sim.events.length = 0;
+  for (let i = 0; i < 4; i++) {
+    const s = sim.seats[i];
+    if (!s) continue;
+    const want = !!inputs[i] && sim.phase === 'playing';
+    // once the tank runs dry the seat must refill a quarter before it can fart again, so an empty seat cannot restart a burst every frame
+    if (s.gas <= 0.02) s.empty = true;
+    if (s.empty && s.gas >= 0.3) s.empty = false;
+    const farting = want && !s.empty;
+    s.started = farting && !s.fart;
+    s.fart = farting;
+    s.gas = Math.max(0, Math.min(1, s.gas + (farting ? -GAS_DRAIN : GAS_REGEN) * dt));
+  }
+  if (sim.phase !== 'playing') {
+    if (sim.phase === 'sunk' && sim.time >= sim.resetAt) { placeAtCheckpoint(sim); sim.phase = 'playing'; }
+    if (sim.phase === 'sunk') sim.time += dt;
+    return;
+  }
+  sim.time += dt;
+  const r = sim.raft;
+  const cos = Math.cos(r.a), sin = Math.sin(r.a);
+  let fx = 0, fy = 0, torque = 0;
+  for (let i = 0; i < 4; i++) {
+    const s = sim.seats[i];
+    if (!s || !s.fart) continue;
+    const [lx, ly] = SEAT_LOCAL[i];
+    const [gx, gy] = SEAT_FART_DIR[i];
+    // thrust is opposite to the gas direction, applied at the seat
+    const px = lx * RAFT_HALF, py = ly * RAFT_HALF;
+    const tx = -gx * THRUST, ty = -gy * THRUST;
+    const wx = tx * cos - ty * sin, wy = tx * sin + ty * cos, tq = (px * ty - py * tx) * TORQUE_SCALE;
+    fx += wx; fy += wy; torque += tq;
+    if (s.started) { const k = BURST / THRUST; r.vx += wx * k; r.vy += wy * k; r.va += tq * k; }
+  }
+  r.vx += fx * dt; r.vy += fy * dt; r.va += torque * dt;
+  // whirlpools
+  for (const w of lv.whirls) {
+    const dx = w.x - r.x, dy = w.y - r.y, d = Math.hypot(dx, dy);
+    if (d < w.r && d > 0.01) {
+      const k = (1 - d / w.r);
+      r.vx += (dx / d * w.pull + -dy / d * w.spin) * k * dt;
+      r.vy += (dy / d * w.pull + dx / d * w.spin) * k * dt;
+      r.va += 1.5 * k * dt;
+    }
+  }
+  // drag
+  const drag = Math.exp(-LINEAR_DRAG * dt), adrag = Math.exp(-ANGULAR_DRAG * dt);
+  r.vx *= drag; r.vy *= drag; r.va *= adrag;
+  r.x += r.vx * dt; r.y += r.vy * dt; r.a += r.va * dt;
+
+  // collisions: banks
+  const q = channelQuery(lv, r.x, r.y);
+  const limit = q.w - RAFT_RADIUS;
+  if (q.dist > limit) {
+    const nx = (r.x - q.px) / (q.dist || 1), ny = (r.y - q.py) / (q.dist || 1);
+    const pen = q.dist - limit;
+    r.x -= nx * pen; r.y -= ny * pen;
+    const vn = r.vx * nx + r.vy * ny;
+    if (vn > 0) {
+      r.vx -= vn * nx * 1.6; r.vy -= vn * ny * 1.6;
+      hit(sim, vn, r.x + nx * RAFT_RADIUS, r.y + ny * RAFT_RADIUS);
+      r.va += (Math.random() - 0.5) * vn * 0.6;
+    }
+  }
+  // rocks
+  for (const [rx, ry, rr] of lv.rocks) collideCircle(sim, rx, ry, rr);
+  // logs: a row of circles along the log
+  for (const log of lv.logs) {
+    const p = logPosition(log, sim.time);
+    const n = Math.max(2, Math.round(p.len / 0.6));
+    for (let i = 0; i < n; i++) {
+      const f = -0.5 + i / (n - 1);
+      collideCircle(sim, p.x + p.tx * f * p.len, p.y + p.ty * f * p.len, 0.45, true);
+    }
+  }
+  // progress & checkpoints
+  sim.bestProgress = Math.max(sim.bestProgress, q.progress);
+  for (let i = sim.checkpoint + 1; i < lv.checkpoints.length; i++) {
+    if (q.progress >= lv.checkpoints[i]) { sim.checkpoint = i; sim.events.push({ kind: 'checkpoint' }); }
+  }
+  if (q.progress >= 0.97) { sim.phase = 'won'; sim.events.push({ kind: 'won' }); }
+  if (sim.hull <= 0) { sim.phase = 'sunk'; sim.resetAt = sim.time + 2.2; sim.events.push({ kind: 'sunk' }); }
+}
+
+function collideCircle(sim, cx, cy, cr, moving) {
+  const r = sim.raft;
+  const dx = r.x - cx, dy = r.y - cy, d = Math.hypot(dx, dy), min = cr + RAFT_RADIUS;
+  if (d >= min || d < 0.001) return;
+  const nx = dx / d, ny = dy / d, pen = min - d;
+  r.x += nx * pen; r.y += ny * pen;
+  const vn = r.vx * nx + r.vy * ny;
+  const push = moving ? 1.5 : 0;
+  if (vn < 0) {
+    r.vx -= vn * nx * 1.5; r.vy -= vn * ny * 1.5;
+    hit(sim, -vn, cx + nx * cr, cy + ny * cr);
+    r.va += (Math.random() - 0.5) * -vn * 0.8;
+  }
+  r.vx += nx * push * 0.05; r.vy += ny * push * 0.05;
+}
+
+function hit(sim, speed, x, y) {
+  if (speed < 1.0) return;
+  const dmg = Math.round((speed - 0.8) * 7);
+  sim.hull = Math.max(0, sim.hull - dmg);
+  sim.events.push({ kind: 'hit', x, y, strength: Math.min(1, speed / 8) });
+}
+
+function snapshot(sim) {
+  const r = sim.raft;
+  return {
+    l: sim.level, ph: sim.phase, t: Math.round(sim.time * 100) / 100,
+    r: [+r.x.toFixed(3), +r.y.toFixed(3), +r.a.toFixed(3)],
+    h: sim.hull, cp: sim.checkpoint,
+    s: sim.seats.map((s) => s ? { id: s.id, n: s.name, c: s.colour, f: s.fart ? 1 : 0, g: Math.round(s.gas * 100), b: s.started ? 1 : 0 } : null),
+    ev: sim.events.map((e) => e.kind === 'hit' ? { k: 'hit', x: +e.x.toFixed(2), y: +e.y.toFixed(2), s: +e.strength.toFixed(2) } : { k: e.kind }),
+  };
+}
+
+// ---------- audio ----------
+const audio = {
+  ctx: null, master: null,
+  ensure() {
+    if (this.ctx) return;
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.master = this.ctx.createGain(); this.master.gain.value = 0.5; this.master.connect(this.ctx.destination);
+    } catch (e) { this.ctx = null; }
+  },
+  fart(seat) {
+    if (!this.ctx) return;
+    const c = this.ctx, t = c.currentTime;
+    const dur = 0.28 + Math.random() * 0.25;
+    const osc = c.createOscillator(); osc.type = 'sawtooth';
+    const base = 95 + seat * 18 + Math.random() * 20;
+    osc.frequency.setValueAtTime(base, t);
+    osc.frequency.exponentialRampToValueAtTime(base * 0.45, t + dur);
+    const lfo = c.createOscillator(); lfo.frequency.value = 28 + Math.random() * 20;
+    const lfoGain = c.createGain(); lfoGain.gain.value = 40; lfo.connect(lfoGain); lfoGain.connect(osc.frequency);
+    const filt = c.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.setValueAtTime(900, t); filt.frequency.exponentialRampToValueAtTime(250, t + dur); filt.Q.value = 4;
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(filt); filt.connect(g); g.connect(this.master);
+    osc.start(t); lfo.start(t); osc.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+  },
+  thud(strength) {
+    if (!this.ctx) return;
+    const c = this.ctx, t = c.currentTime;
+    const buf = c.createBuffer(1, c.sampleRate * 0.2, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+    const src = c.createBufferSource(); src.buffer = buf;
+    const filt = c.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 400 + strength * 600;
+    const g = c.createGain(); g.gain.value = 0.3 + strength * 0.6;
+    src.connect(filt); filt.connect(g); g.connect(this.master); src.start(t);
+  },
+  jingle(won) {
+    if (!this.ctx) return;
+    const c = this.ctx, t = c.currentTime;
+    const notes = won ? [523, 659, 784, 1046] : [392, 330, 262, 196];
+    notes.forEach((f, i) => {
+      const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t + i * 0.13); g.gain.exponentialRampToValueAtTime(0.4, t + i * 0.13 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + i * 0.13 + 0.3);
+      o.connect(g); g.connect(this.master); o.start(t + i * 0.13); o.stop(t + i * 0.13 + 0.35);
+    });
+  },
+};
+
+// ---------- rendering ----------
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+}
+window.addEventListener('resize', resize); resize();
+
+const particles = [];
+function spawnFart(x, y, dx, dy, big) {
+  const n = big ? 10 : 2;
+  for (let i = 0; i < n; i++) {
+    const spread = (Math.random() - 0.5) * 0.9;
+    const sp = 2 + Math.random() * 2.5 + (big ? 2 : 0);
+    particles.push({
+      x, y, vx: (dx + spread * dy) * sp, vy: (dy - spread * dx) * sp,
+      life: 0.6 + Math.random() * 0.5, age: 0, r: 0.25 + Math.random() * 0.3, kind: 'gas',
+    });
+  }
+}
+function spawnSplash(x, y, strength) {
+  for (let i = 0; i < 12 * strength + 4; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 5 * strength;
+    particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5, age: 0, r: 0.12 + Math.random() * 0.15, kind: 'splash' });
+  }
+}
+function stepParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.age += dt;
+    if (p.age >= p.life) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= 0.96; p.vy *= 0.96;
+    if (p.kind === 'gas') p.r += dt * 0.9;
+  }
+}
+
+const cam = { x: 0, y: 0, zoom: 30, initialised: false };
+
+function drawWorld(view, now) {
+  const lv = LEVELS[view.level];
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  // land
+  ctx.fillStyle = '#7cc24a';
+  ctx.fillRect(0, 0, W, H);
+  const targetZoom = Math.min(W, H) / 26;
+  if (!cam.initialised) { cam.x = view.raft.x; cam.y = view.raft.y; cam.zoom = targetZoom; cam.initialised = true; }
+  cam.x += (view.raft.x + view.raft.vx * 0.15 - cam.x) * 0.12;
+  cam.y += (view.raft.y + view.raft.vy * 0.15 - cam.y) * 0.12;
+  cam.zoom += (targetZoom - cam.zoom) * 0.1;
+  ctx.save();
+  ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-cam.x, -cam.y);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+
+  // grass texture: sparse dots in a grid (world-stable)
+  ctx.fillStyle = '#5a9a35';
+  const gx0 = Math.floor((cam.x - W / cam.zoom) / 4) * 4, gy0 = Math.floor((cam.y - H / cam.zoom) / 4) * 4;
+  for (let x = gx0; x < cam.x + W / cam.zoom; x += 4) for (let y = gy0; y < cam.y + H / cam.zoom; y += 4) {
+    const h = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; const f = h - Math.floor(h);
+    ctx.beginPath(); ctx.arc(x + f * 3, y + (f * 7) % 3, 0.18, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // channel: bank stroke then water fill
+  drawChannel(lv, 1.1, '#5a9a35');
+  drawChannel(lv, 0.55, '#d9b36a');
+  drawChannel(lv, 0, '#2d8fd5');
+
+  // water ripples
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 0.12;
+  for (let i = 0; i < lv.path.length; i++) {
+    const [px, py, pw] = lv.path[i];
+    for (let k = 0; k < 3; k++) {
+      const ox = Math.sin(now * 0.8 + i * 1.7 + k * 2.1) * pw * 0.5, oy = Math.cos(now * 0.6 + i * 1.3 + k * 1.9) * pw * 0.5;
+      ctx.beginPath(); ctx.moveTo(px + ox - 0.6, py + oy); ctx.quadraticCurveTo(px + ox, py + oy - 0.25, px + ox + 0.6, py + oy); ctx.stroke();
+    }
+  }
+
+  // whirlpools
+  for (const w of lv.whirls) {
+    ctx.save(); ctx.translate(w.x, w.y); ctx.rotate(now * 2.2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 0.18;
+    for (let k = 0; k < 3; k++) {
+      ctx.beginPath();
+      for (let a = 0; a < Math.PI * 2 * 1.5; a += 0.2) { const rr = w.r * (0.15 + (a / (Math.PI * 3)) * 0.8); const ang = a + k * 2.1; ctx.lineTo(Math.cos(ang) * rr, Math.sin(ang) * rr); }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // checkpoints & finish
+  lv.checkpointPts.forEach((p, i) => drawGate(p, i <= view.checkpoint ? '#a8e63d' : '#ffcc3d', false));
+  drawGate(lv.finish, '#fff', true);
+
+  // rocks
+  for (const [rx, ry, rr] of lv.rocks) {
+    ctx.fillStyle = '#6b6e78'; ctx.beginPath(); ctx.arc(rx, ry, rr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#9a9ea8'; ctx.beginPath(); ctx.arc(rx - rr * 0.25, ry - rr * 0.3, rr * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.12; ctx.beginPath(); ctx.arc(rx, ry, rr, 0, Math.PI * 2); ctx.stroke();
+  }
+  // logs
+  for (const log of lv.logs) {
+    const p = logPosition(log, view.time);
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.atan2(p.ty, p.tx));
+    ctx.fillStyle = '#8d5a28'; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.12;
+    roundRect(-p.len / 2, -0.45, p.len, 0.9, 0.45); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 0.08;
+    for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(-p.len / 2 + 0.4, k * 0.22); ctx.lineTo(p.len / 2 - 0.4, k * 0.22); ctx.stroke(); }
+    ctx.fillStyle = '#c88a4a'; ctx.beginPath(); ctx.arc(p.len / 2, 0, 0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // particles under raft (splash) and gas
+  for (const p of particles) {
+    const k = 1 - p.age / p.life;
+    if (p.kind === 'gas') { ctx.fillStyle = `rgba(168,230,61,${0.55 * k})`; }
+    else { ctx.fillStyle = `rgba(255,255,255,${0.8 * k})`; }
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // raft
+  const r = view.raft;
+  ctx.save(); ctx.translate(r.x, r.y); ctx.rotate(r.a);
+  if (view.phase === 'sunk') { const k = Math.min(1, (view.time - view.sunkAt) / 1.5); ctx.scale(1 - k * 0.6, 1 - k * 0.6); ctx.globalAlpha = 1 - k * 0.8; ctx.rotate(k * 2); }
+  ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.arc(0.15, 0.2, RAFT_RADIUS, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#c88a4a'; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.14;
+  roundRect(-RAFT_HALF * 1.1, -RAFT_HALF * 1.1, RAFT_HALF * 2.2, RAFT_HALF * 2.2, 0.35); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = '#8d5a28'; ctx.lineWidth = 0.08;
+  for (let k = -0.7; k <= 0.75; k += 0.37) { ctx.beginPath(); ctx.moveTo(k, -RAFT_HALF * 1.05); ctx.lineTo(k, RAFT_HALF * 1.05); ctx.stroke(); }
+  // bow marker
+  ctx.fillStyle = '#ff7a3d'; ctx.beginPath(); ctx.moveTo(-0.35, -RAFT_HALF * 1.1); ctx.lineTo(0.35, -RAFT_HALF * 1.1); ctx.lineTo(0, -RAFT_HALF * 1.55); ctx.closePath(); ctx.fill(); ctx.stroke();
+  // seats & players
+  for (let i = 0; i < 4; i++) {
+    const [lx, ly] = SEAT_LOCAL[i];
+    const sx = lx * RAFT_HALF * 0.85, sy = ly * RAFT_HALF * 0.85;
+    const s = view.seats[i];
+    if (!s) { ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.arc(sx, sy, 0.33, 0, Math.PI * 2); ctx.fill(); continue; }
+    const squish = s.fart ? 0.85 : 1;
+    ctx.save(); ctx.translate(sx, sy); ctx.scale(1, squish);
+    ctx.fillStyle = s.colour; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.1;
+    ctx.beginPath(); ctx.arc(0, 0, 0.42, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    // face toward the bow
+    const fy = -0.1;
+    ctx.fillStyle = '#1b1b2a';
+    ctx.beginPath(); ctx.arc(-0.14, fy, 0.06, 0, Math.PI * 2); ctx.arc(0.14, fy, 0.06, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 0.06; ctx.beginPath();
+    if (s.fart) { ctx.arc(0, fy + 0.18, 0.1, 0, Math.PI * 2); } else { ctx.arc(0, fy + 0.1, 0.13, 0.2, Math.PI - 0.2); }
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // name tags above players (screen-aligned)
+  ctx.font = `bold ${0.34}px Nunito, sans-serif`; ctx.textBaseline = 'middle';
+  for (let i = 0; i < 4; i++) {
+    const s = view.seats[i]; if (!s) continue;
+    const [lx, ly] = SEAT_LOCAL[i];
+    const sx = lx * RAFT_HALF * 0.85, sy = ly * RAFT_HALF * 0.85;
+    const wx = r.x + sx * Math.cos(r.a) - sy * Math.sin(r.a), wy = r.y + sx * Math.sin(r.a) + sy * Math.cos(r.a);
+    // tags sit beside the raft on the player's side so two names never overlap
+    const side = wx >= r.x ? 1 : -1;
+    ctx.textAlign = side > 0 ? 'left' : 'right';
+    ctx.lineWidth = 0.1; ctx.strokeStyle = '#1b1b2a'; ctx.fillStyle = '#fff';
+    ctx.strokeText(s.name, r.x + side * 1.75, wy); ctx.fillText(s.name, r.x + side * 1.75, wy);
+  }
+
+  // waypoint arrow toward the next bit of river
+  const q = channelQuery(lv, r.x, r.y);
+  const ahead = pointAt(lv, Math.min(0.985, q.progress + 0.08));
+  const ax = ahead.x - r.x, ay = ahead.y - r.y, al = Math.hypot(ax, ay) || 1;
+  if (view.phase === 'playing' && al > 4) {
+    ctx.save(); ctx.translate(r.x + ax / al * 2.6, r.y + ay / al * 2.6); ctx.rotate(Math.atan2(ay, ax));
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.08;
+    ctx.beginPath(); ctx.moveTo(0.5, 0); ctx.lineTo(-0.3, 0.35); ctx.lineTo(-0.1, 0); ctx.lineTo(-0.3, -0.35); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawChannel(lv, extra, colour) {
+  const pts = lv.path;
+  ctx.fillStyle = colour;
+  for (let i = 1; i < pts.length; i++) {
+    const [ax, ay, aw] = pts[i - 1], [bx, by, bw] = pts[i];
+    const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy), nx = -dy / len, ny = dx / len;
+    const w1 = aw + extra, w2 = bw + extra;
+    ctx.beginPath();
+    ctx.moveTo(ax + nx * w1, ay + ny * w1); ctx.lineTo(bx + nx * w2, by + ny * w2);
+    ctx.lineTo(bx - nx * w2, by - ny * w2); ctx.lineTo(ax - nx * w1, ay - ny * w1);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx, by, w2, 0, Math.PI * 2); ctx.fill();
+  }
+  const [sx, sy, sw] = pts[0];
+  ctx.beginPath(); ctx.arc(sx, sy, sw + extra, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawGate(p, colour, finish) {
+  ctx.save();
+  ctx.strokeStyle = colour; ctx.lineWidth = finish ? 0.5 : 0.3; ctx.setLineDash(finish ? [0.5, 0.5] : [0.6, 0.6]);
+  ctx.beginPath(); ctx.moveTo(p.x + p.nx * p.w, p.y + p.ny * p.w); ctx.lineTo(p.x - p.nx * p.w, p.y - p.ny * p.w); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = colour; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.1;
+  for (const sgn of [1, -1]) {
+    const bx = p.x + p.nx * p.w * sgn, by = p.y + p.ny * p.w * sgn;
+    ctx.beginPath(); ctx.arc(bx, by, 0.45, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y); ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r); ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h); ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r); ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath();
+}
+
+// ---------- view state (what gets drawn; built from sim locally or from snapshots online) ----------
+function emptyView(level) {
+  const lv = LEVELS[level];
+  return { level, phase: 'lobby', time: 0, raft: { x: lv.start.x, y: lv.start.y, a: lv.start.a, vx: 0, vy: 0 }, hull: MAX_HULL, checkpoint: -1, seats: [null, null, null, null], sunkAt: 0 };
+}
+
+// ---------- UI helpers ----------
+const $ = (id) => document.getElementById(id);
+const screens = { title: $('screen-title'), lobby: $('screen-lobby'), result: $('screen-result') };
+function showScreen(name) { for (const k in screens) screens[k].hidden = k !== name; $('hud').hidden = name !== null; }
+function fmtTime(t) { const m = Math.floor(t / 60), s = t - m * 60; return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`; }
+let toastTimer = 0;
+function toast(text, ms = 1800) { const el = $('toast'); el.textContent = text; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), ms); }
+
+const prefs = { name: '', colour: 0 };
+try { const saved = JSON.parse(localStorage.getItem('gasraft-prefs') || 'null'); if (saved) Object.assign(prefs, saved); } catch (e) {}
+function savePrefs() { try { localStorage.setItem('gasraft-prefs', JSON.stringify(prefs)); } catch (e) {} }
+$('name').value = prefs.name;
+$('name').addEventListener('input', () => { prefs.name = $('name').value.trim(); savePrefs(); });
+const colourPick = $('colour-pick');
+COLOURS.forEach((c, i) => {
+  const b = document.createElement('button'); b.type = 'button'; b.style.background = c; b.style.width = '34px'; b.style.height = '34px'; b.style.padding = '0'; b.setAttribute('aria-label', `Colour ${i + 1}`);
+  b.setAttribute('aria-pressed', String(i === prefs.colour));
+  b.addEventListener('click', () => { prefs.colour = i; savePrefs(); [...colourPick.children].forEach((x, j) => x.setAttribute('aria-pressed', String(j === i))); });
+  colourPick.appendChild(b);
+});
+let couchCount = 2;
+$('couch-count').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  couchCount = +b.dataset.n; [...$('couch-count').children].forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+});
+function myName() { return prefs.name || 'Captain Toot'; }
+
+// ---------- input ----------
+const keysDown = new Set();
+window.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  const k = e.key.toLowerCase();
+  if (k === ' ' ) e.preventDefault();
+  if (!keysDown.has(k)) { keysDown.add(k); audio.ensure(); }
+});
+window.addEventListener('keyup', (e) => keysDown.delete(e.key.toLowerCase()));
+window.addEventListener('blur', () => keysDown.clear());
+
+const touchZones = $('touchzones');
+const touchDown = new Map(); // zone index -> count of pointers
+function setupTouchZones(n) {
+  touchZones.innerHTML = '';
+  touchDown.clear();
+  if (n === 0) { touchZones.style.display = 'none'; return; }
+  touchZones.style.display = 'block';
+  // zones laid out like the seats: back row along the bottom, front row along the top
+  const layout = n === 1 ? [[0, 0, 1, 1]] : n === 2 ? [[0, 0, 0.5, 1], [0.5, 0, 0.5, 1]] : n === 3 ? [[0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5], [0, 0, 1, 0.5]] : [[0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5], [0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5]];
+  layout.forEach((l, i) => {
+    const z = document.createElement('div'); z.className = 'zone';
+    z.style.left = l[0] * 100 + '%'; z.style.top = l[1] * 100 + '%'; z.style.width = l[2] * 100 + '%'; z.style.height = l[3] * 100 + '%';
+    z.dataset.label = n === 1 ? 'Hold to fart' : SEAT_NAMES[i];
+    z.dataset.zone = i;
+    const down = (e) => { e.preventDefault(); audio.ensure(); touchDown.set(i, (touchDown.get(i) || 0) + 1); z.classList.add('on'); };
+    const up = (e) => { e.preventDefault(); touchDown.set(i, Math.max(0, (touchDown.get(i) || 0) - 1)); if (!touchDown.get(i)) z.classList.remove('on'); };
+    z.addEventListener('pointerdown', down); z.addEventListener('pointerup', up); z.addEventListener('pointercancel', up); z.addEventListener('pointerleave', up);
+    touchZones.appendChild(z);
+  });
+}
+
+// ---------- game modes ----------
+let mode = null; // 'couch' | 'host' | 'client'
+let sim = null;
+let view = emptyView(0);
+let lastFrame = performance.now();
+let accumulator = 0;
+let lastSnapSent = 0;
+let peer = null, hostConn = null; // client: hostConn is the data channel to the host
+const clientConns = new Map(); // host: peer id -> {conn, n, c, f}
+let roomCode = '';
+let mySeatHint = -1;
+const seatFartPrev = [false, false, false, false];
+const snaps = []; // client interpolation buffer: {at, snap}
+let clientSunkAt = 0;
+
+function startCouch() {
+  audio.ensure();
+  mode = 'couch';
+  sim = newSim(0);
+  for (let i = 0; i < couchCount; i++) sim.seats[i] = { id: 'local' + i, name: i === 0 ? myName() : `Player ${i + 1}`, colour: COLOURS[(prefs.colour + i) % COLOURS.length], fart: false, gas: 1 };
+  sim.phase = 'playing';
+  setupTouchZones(couchCount);
+  showScreen(null);
+  cam.initialised = false;
+  $('hud-hint').innerHTML = couchCount <= 2 ? '<kbd>A</kbd> back left · <kbd>L</kbd> back right' : '<kbd>A</kbd> <kbd>L</kbd> back · <kbd>Q</kbd> <kbd>P</kbd> front';
+  toast(LEVELS[0].name, 2200);
+}
+
+function couchInputs() {
+  const out = [];
+  for (let i = 0; i < 4; i++) out[i] = keysDown.has(SEAT_KEYS[i]) || !!touchDown.get(i);
+  return out;
+}
+
+function myInputDown() { return keysDown.has(' ') || !!touchDown.get(0); }
+
+// --- online ---
+function randomCode() { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; let s = ''; for (let i = 0; i < 4; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
+
+function peerOptions() { return { debug: 0 }; }
+
+function closePeer() {
+  for (const { conn } of clientConns.values()) { try { conn.close(); } catch (e) {} }
+  clientConns.clear();
+  if (hostConn) { try { hostConn.close(); } catch (e) {} hostConn = null; }
+  if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
+}
+
+function hostGame(attempt = 0) {
+  audio.ensure();
+  const status = $('online-status');
+  if (attempt === 0) { status.textContent = 'Opening a room…'; $('btn-host').disabled = true; }
+  roomCode = randomCode();
+  closePeer();
+  peer = new Peer('gasraft-' + roomCode.toLowerCase(), peerOptions());
+  peer.on('open', () => {
+    mode = 'host';
+    sim = newSim(0);
+    setupTouchZones(1);
+    showScreen('lobby');
+    $('lobby-code').textContent = roomCode;
+    $('btn-start').hidden = false;
+    $('lobby-status').textContent = 'Waiting for friends…';
+    $('hud-hint').innerHTML = 'Hold <kbd>Space</kbd> or the screen to fart';
+    $('btn-host').disabled = false;
+  });
+  peer.on('connection', (conn) => {
+    clientConns.set(conn.peer, { conn, n: '', c: 0, f: false });
+    conn.on('data', (d) => {
+      const c = clientConns.get(conn.peer); if (!c || !d || typeof d !== 'object') return;
+      if (typeof d.n === 'string') c.n = d.n.slice(0, 12);
+      if (typeof d.c === 'number') c.c = d.c;
+      if ('f' in d) c.f = d.f === 1 || d.f === true;
+    });
+    const drop = () => clientConns.delete(conn.peer);
+    conn.on('close', drop); conn.on('error', drop);
+  });
+  peer.on('error', (err) => {
+    if (err && err.type === 'unavailable-id' && attempt < 5) { hostGame(attempt + 1); return; }
+    $('btn-host').disabled = false;
+    if (mode === 'host') { toast('Connection to the room was lost', 2500); return; }
+    status.textContent = err && err.type === 'network' ? 'Could not reach the signalling server. Check your connection and try again.' : 'Could not open a room right now. Try again in a moment.';
+  });
+}
+
+function joinGame() {
+  audio.ensure();
+  const status = $('online-status');
+  const code = $('join-code').value.trim().toUpperCase();
+  if (code.length !== 4) { status.textContent = 'Type the four-letter code from the host.'; return; }
+  roomCode = code;
+  closePeer();
+  status.textContent = 'Joining ' + code + '…';
+  $('btn-join').disabled = true;
+  let opened = false;
+  const fail = (text) => { if (mode === 'client') { toast(text, 2500); leaveGame(); return; } closePeer(); status.textContent = text; $('btn-join').disabled = false; };
+  peer = new Peer(peerOptions());
+  peer.on('open', () => {
+    hostConn = peer.connect('gasraft-' + code.toLowerCase(), { serialization: 'json', reliable: true });
+    hostConn.on('open', () => {
+      opened = true;
+      mode = 'client';
+      sim = null; snaps.length = 0; lastPresenceSent = null;
+      hostConn.send({ n: myName(), c: prefs.colour, f: 0 });
+      setupTouchZones(1);
+      showScreen('lobby');
+      $('lobby-code').textContent = code;
+      $('btn-start').hidden = true;
+      $('lobby-status').textContent = 'Waiting for the host to set sail…';
+      $('hud-hint').innerHTML = 'Hold <kbd>Space</kbd> or the screen to fart';
+      $('btn-join').disabled = false;
+    });
+    hostConn.on('data', (d) => onSnapshot(d));
+    hostConn.on('close', () => fail('The host left the game.'));
+    hostConn.on('error', () => fail('Lost the connection to the host.'));
+    setTimeout(() => { if (!opened) fail('No game found with code ' + code + '. Check the code and that the host is still in the lobby.'); }, 9000);
+  });
+  peer.on('error', (err) => {
+    if (err && err.type === 'peer-unavailable') fail('No game found with code ' + code + '. Check the code and that the host is still in the lobby.');
+    else fail('Could not connect. Check your internet connection and try again.');
+  });
+}
+
+function leaveGame() {
+  closePeer();
+  mode = null; sim = null; snaps.length = 0; mySeatHint = -1;
+  setupTouchZones(0);
+  showScreen('title');
+}
+
+function hostAssignSeats() {
+  const present = new Set(['host']);
+  const people = [{ id: 'host', n: myName(), c: prefs.colour, f: myInputDown(), me: true }];
+  for (const [id, c] of clientConns) if (c.n) { present.add(id); people.push({ id, n: c.n, c: c.c, f: c.f }); }
+  for (const p of people) {
+    let seat = sim.seats.findIndex((s) => s && s.id === p.id);
+    if (seat < 0) {
+      seat = sim.seats.findIndex((s) => !s);
+      if (seat < 0) continue;
+      sim.seats[seat] = { id: p.id, name: '', colour: '#fff', fart: false, gas: 1 };
+    }
+    const s = sim.seats[seat];
+    s.name = p.n || 'Someone';
+    s.colour = COLOURS[Math.abs(+p.c || 0) % COLOURS.length];
+    s.input = p.f;
+    if (p.me) mySeatHint = seat;
+  }
+  for (let i = 0; i < 4; i++) if (sim.seats[i] && !present.has(sim.seats[i].id)) sim.seats[i] = null;
+  return sim.seats.map((s) => s ? !!s.input : false);
+}
+
+let lastPresenceSent = null;
+function clientSendInput() {
+  if (!hostConn || !hostConn.open) return;
+  const f = myInputDown() ? 1 : 0;
+  if (f !== lastPresenceSent) { lastPresenceSent = f; hostConn.send({ f }); }
+}
+
+function hostBroadcast(snap) {
+  for (const { conn } of clientConns.values()) if (conn.open) { try { conn.send(snap); } catch (e) {} }
+}
+
+function onSnapshot(data) {
+  if (!data || !Array.isArray(data.r)) return;
+  snaps.push({ at: performance.now(), snap: data });
+  if (snaps.length > 6) snaps.shift();
+  for (const ev of data.ev || []) handleEvent(ev, data);
+  if (data.ph === 'sunk' && view.phase !== 'sunk') clientSunkAt = data.t;
+}
+
+function handleEvent(ev, snap) {
+  if (ev.k === 'hit') { spawnSplash(ev.x, ev.y, ev.s); audio.thud(ev.s); }
+  else if (ev.k === 'checkpoint') toast('Checkpoint!', 1200);
+  else if (ev.k === 'won') { audio.jingle(true); }
+  else if (ev.k === 'sunk') { audio.jingle(false); toast('Glub glub… back to the last checkpoint', 2000); }
+}
+
+function viewFromSnaps() {
+  if (!snaps.length) return;
+  const renderAt = performance.now() - 1000 / SNAP_HZ * 1.5;
+  let a = snaps[0], b = snaps[snaps.length - 1];
+  for (let i = 0; i < snaps.length - 1; i++) if (snaps[i].at <= renderAt && snaps[i + 1].at >= renderAt) { a = snaps[i]; b = snaps[i + 1]; break; }
+  const f = a === b ? 1 : Math.max(0, Math.min(1, (renderAt - a.at) / (b.at - a.at)));
+  const s = b.snap;
+  if (view.level !== s.l) { view = emptyView(s.l); cam.initialised = false; }
+  const ra = a.snap.r, rb = s.r;
+  let da = rb[2] - ra[2]; da = Math.atan2(Math.sin(da), Math.cos(da));
+  view.raft.vx = (rb[0] - ra[0]) / Math.max(0.001, (b.at - a.at) / 1000);
+  view.raft.vy = (rb[1] - ra[1]) / Math.max(0.001, (b.at - a.at) / 1000);
+  view.raft.x = ra[0] + (rb[0] - ra[0]) * f; view.raft.y = ra[1] + (rb[1] - ra[1]) * f; view.raft.a = ra[2] + da * f;
+  view.phase = s.ph; view.time = s.t; view.hull = s.h; view.checkpoint = s.cp; view.sunkAt = clientSunkAt;
+  view.seats = s.s.map((x) => x ? { id: x.id, name: x.n, colour: COLOURS[Math.abs(+x.c || 0) % COLOURS.length], fart: !!x.f, gas: x.g / 100, started: !!x.b } : null);
+  if (peer) mySeatHint = view.seats.findIndex((x) => x && x.id === peer.id);
+}
+
+function viewFromSim() {
+  const r = sim.raft;
+  view.level = sim.level; view.phase = sim.phase; view.time = sim.time; view.hull = sim.hull; view.checkpoint = sim.checkpoint;
+  view.raft.x = r.x; view.raft.y = r.y; view.raft.a = r.a; view.raft.vx = r.vx; view.raft.vy = r.vy;
+  view.seats = sim.seats.map((s) => s ? { id: s.id, name: s.name, colour: s.colour, fart: s.fart, gas: s.gas, started: s.started } : null);
+  if (sim.phase === 'sunk' && view.sunkAt === 0) view.sunkAt = sim.time;
+  if (sim.phase !== 'sunk') view.sunkAt = 0;
+}
+
+// ---------- HUD ----------
+let lobbyRendered = '';
+function renderHud() {
+  $('hud-level').textContent = LEVELS[view.level].name.split(' · ')[0];
+  const hull = $('hud-hull'); hull.style.width = Math.max(0, view.hull) + '%'; hull.classList.toggle('low', view.hull < 35);
+  $('hud-time').textContent = fmtTime(view.time);
+  const list = $('gas-list');
+  const key = view.seats.map((s, i) => s ? `${i}${s.id}${s.name}${Math.round(s.gas * 20)}${s.fart ? 1 : 0}` : '-').join('|');
+  if (list.dataset.key !== key) {
+    list.dataset.key = key;
+    list.innerHTML = '';
+    view.seats.forEach((s, i) => {
+      if (!s) return;
+      const el = document.createElement('div'); el.className = 'gas' + (i === mySeatHint && mode !== 'couch' ? ' me' : '');
+      el.innerHTML = `<div class="name"><span class="dot" style="background:${s.colour}"></span><span></span></div><div class="bar"><i style="width:${Math.round(s.gas * 100)}%"></i></div>`;
+      el.querySelector('.name span:last-child').textContent = `${s.name} · ${SEAT_NAMES[i]}${s.fart ? ' 💨' : ''}`;
+      list.appendChild(el);
+    });
+  }
+  if (mode !== 'couch') {
+    const lobbyKey = view.seats.map((s) => s ? s.id + s.name + s.colour : '-').join('|') + view.phase;
+    if (lobbyKey !== lobbyRendered) {
+      lobbyRendered = lobbyKey;
+      const seatsEl = $('lobby-seats'); seatsEl.innerHTML = '';
+      view.seats.forEach((s, i) => {
+        const el = document.createElement('div'); el.className = 'seat' + (s ? '' : ' empty');
+        el.innerHTML = `<div class="pos">${SEAT_NAMES[i]}</div><div class="who"><span class="dot" style="background:${s ? s.colour : 'transparent'}"></span><span></span></div>`;
+        el.querySelector('.who span:last-child').textContent = s ? s.name + (i === mySeatHint ? ' (you)' : '') : 'Empty seat';
+        seatsEl.appendChild(el);
+      });
+      const filled = view.seats.filter(Boolean).length;
+      if (mode === 'host') { $('btn-start').disabled = filled < 1; $('lobby-status').textContent = filled < 2 ? 'Waiting for friends… (you can also sail solo to practise)' : `${filled} aboard. Ready when you are.`; }
+    }
+  }
+}
+
+// ---------- main loop ----------
+let prevPhase = 'lobby';
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.1, (now - lastFrame) / 1000); lastFrame = now;
+  if (!mode) { drawTitleBackdrop(now / 1000); return; }
+
+  if (mode === 'couch' || mode === 'host') {
+    accumulator += dt;
+    let inputs;
+    if (mode === 'host') inputs = hostAssignSeats();
+    else inputs = couchInputs();
+    let steps = 0;
+    while (accumulator >= FIXED_DT && steps < 6) {
+      stepSim(sim, inputs, FIXED_DT); accumulator -= FIXED_DT; steps++;
+      for (const ev of sim.events) handleEvent(ev);
+    }
+    viewFromSim();
+    if (mode === 'host' && now - lastSnapSent >= 1000 / (sim.phase === 'playing' || sim.phase === 'sunk' ? SNAP_HZ : 4)) {
+      lastSnapSent = now;
+      hostBroadcast(snapshot(sim));
+    }
+  } else if (mode === 'client') {
+    clientSendInput();
+    viewFromSnaps();
+  }
+
+  // local fart effects: spawn gas from farting seats; the sound plays on the first frame of each fart
+  for (let i = 0; i < 4; i++) {
+    const s = view.seats[i];
+    const farting = !!(s && s.fart);
+    if (farting) {
+      const [lx, ly] = SEAT_LOCAL[i], [gx, gy] = SEAT_FART_DIR[i];
+      const cos = Math.cos(view.raft.a), sin = Math.sin(view.raft.a);
+      const sx = lx * RAFT_HALF * 0.85, sy = ly * RAFT_HALF * 0.85 + gy * 0.4;
+      const wx = view.raft.x + sx * cos - sy * sin, wy = view.raft.y + sx * sin + sy * cos;
+      const dx = gx * cos - gy * sin, dy = gx * sin + gy * cos;
+      spawnFart(wx, wy, dx, dy, !seatFartPrev[i]);
+      if (!seatFartPrev[i]) audio.fart(i);
+    }
+    seatFartPrev[i] = farting;
+  }
+  stepParticles(dt);
+  drawWorld(view, now / 1000);
+  renderHud();
+
+  // screen transitions driven by phase
+  if (view.phase !== prevPhase) {
+    if (view.phase === 'playing' && (prevPhase === 'lobby' || prevPhase === 'won')) { showScreen(null); toast(LEVELS[view.level].name, 2200); cam.initialised = false; }
+    if (view.phase === 'won') showResult();
+    if (view.phase === 'lobby' && mode !== 'couch') showScreen('lobby');
+    prevPhase = view.phase;
+  }
+}
+
+function showResult() {
+  $('result-title').textContent = view.level === LEVELS.length - 1 ? 'You beat every course!' : 'Course complete!';
+  $('result-time').textContent = fmtTime(view.time);
+  const crew = view.seats.filter(Boolean).map((s) => s.name).join(', ');
+  $('result-text').textContent = `${crew} farted in harmony. Hull left: ${Math.round(view.hull)}%.`;
+  const isDriver = mode !== 'client';
+  $('btn-next').hidden = !isDriver || view.level === LEVELS.length - 1;
+  $('btn-retry').hidden = !isDriver;
+  showScreen('result');
+}
+
+function drawTitleBackdrop(now) {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = '#2d8fd5'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 3;
+  for (let i = 0; i < 14; i++) {
+    const y = (i / 14) * H + Math.sin(now * 0.7 + i) * 8;
+    ctx.beginPath();
+    for (let x = -40; x <= W + 40; x += 20) ctx.lineTo(x, y + Math.sin((x + now * 60) / 45 + i) * 6);
+    ctx.stroke();
+  }
+}
+
+// ---------- buttons ----------
+$('btn-couch').addEventListener('click', startCouch);
+$('btn-host').addEventListener('click', hostGame);
+$('btn-join').addEventListener('click', joinGame);
+$('join-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinGame(); });
+$('btn-start').addEventListener('click', () => { if (mode === 'host' && sim) { sim.phase = 'playing'; } });
+$('btn-leave').addEventListener('click', leaveGame);
+$('btn-menu').addEventListener('click', leaveGame);
+$('btn-next').addEventListener('click', () => {
+  if (!sim) return;
+  const seats = sim.seats; sim = newSim(Math.min(LEVELS.length - 1, sim.level + 1)); sim.seats = seats.map((s) => s ? { ...s, gas: 1, fart: false } : null);
+  sim.phase = 'playing'; view = emptyView(sim.level); cam.initialised = false; prevPhase = 'won';
+});
+$('btn-retry').addEventListener('click', () => {
+  if (!sim) return;
+  const seats = sim.seats; sim = newSim(sim.level); sim.seats = seats.map((s) => s ? { ...s, gas: 1, fart: false } : null);
+  sim.phase = 'playing'; prevPhase = 'won'; cam.initialised = false;
+});
+
+// ---------- online bootstrap ----------
+(() => {
+  const status = $('online-status');
+  if (typeof Peer !== 'function') { status.textContent = 'Online play could not load (the networking library is blocked). Couch mode still works.'; return; }
+  $('btn-join').disabled = false;
+  $('btn-host').disabled = false;
+  status.textContent = 'Online ready. Host a game and share the code, or join a friend\u2019s.';
+})();
+
+window.__gasraft = { get sim() { return sim; }, get view() { return view; } };
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
