@@ -1003,7 +1003,10 @@ function hostAssignSeats() {
     }
     const s = sim.seats[seat];
     s.name = p.n || 'Someone';
-    s.colour = COLOURS[Math.abs(+p.c || 0) % COLOURS.length];
+    // two players who picked the same colour would be indistinguishable on the raft, so later seats shift to the next free one
+    let ci = Math.abs(+p.c || 0) % COLOURS.length;
+    while (sim.seats.some((o) => o && o !== s && o.colour === COLOURS[ci])) ci = (ci + 1) % COLOURS.length;
+    s.colour = COLOURS[ci];
     s.input = p.f;
     if (p.me) mySeatHint = seat;
   }
