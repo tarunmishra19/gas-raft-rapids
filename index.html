@@ -71,12 +71,13 @@
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .row > * { min-width: 0; }
   label { font-weight: 700; font-size: 0.9rem; }
-  input[type=text] {
+  input[type=text], select {
     font: inherit; font-weight: 700; font-size: 1.05rem;
     padding: 10px 12px; border: 3px solid var(--ink); border-radius: 12px;
     background: #fff; color: var(--ink); width: 100%; box-sizing: border-box;
     text-transform: none;
   }
+  select { flex: 1; min-width: 0; cursor: pointer; }
   input.code { text-transform: uppercase; letter-spacing: 0.25em; font-family: var(--font-display); font-size: 1.4rem; }
   input:focus-visible, button:focus-visible { outline: 4px solid var(--water); outline-offset: 2px; }
   button {
@@ -191,7 +192,7 @@
 <div class="overlay" id="screen-title">
   <div class="card">
     <h1>Gas Raft Rapids</h1>
-    <p>Two to four of you share one raft. The only way to steer is to fart. Back seats push the raft forward, front seats brake, and farting from one side swings the raft toward the other. The secret is farting <strong>together</strong>, at the right moment.</p>
+    <p>Two to four of you share one raft. The only way to steer is to fart. Back seats push the raft forward, front seats brake, and farting from one side swings the raft toward the other. The secret is farting <strong>together</strong>, at the right moment. Eight courses, from a lazy river to a sewer and a volcano.</p>
     <div>
       <label for="name">Your name</label>
       <input type="text" id="name" maxlength="12" placeholder="Captain Toot" autocomplete="off">
@@ -199,6 +200,10 @@
     <div class="row">
       <label>Your colour</label>
       <div class="seg" id="colour-pick" role="group" aria-label="Colour"></div>
+    </div>
+    <div class="row">
+      <label for="level-pick">Course</label>
+      <select id="level-pick"></select>
     </div>
     <hr style="border:0;border-top:3px dashed var(--ink);opacity:0.25;margin:4px 0">
     <h2>Play on this device</h2>
@@ -277,6 +282,18 @@ const SNAP_HZ = 15;
 const FIXED_DT = 1 / 60;
 
 // ---------- levels ----------
+// Per-course palette: land fill, land dots, bank, water, rock body, rock highlight.
+const THEMES = {
+  meadow: { land: '#7cc24a', dots: '#5a9a35', bank: '#d9b36a', water: '#2d8fd5', rock: '#6b6e78', rockLight: '#9a9ea8' },
+  canyon: { land: '#d29a5a', dots: '#b47b3f', bank: '#f0c98a', water: '#2d8fd5', rock: '#8a4a2a', rockLight: '#b7764a' },
+  forest: { land: '#4f8f3a', dots: '#386c2a', bank: '#b89457', water: '#2a7fc4', rock: '#5f6370', rockLight: '#8c909c' },
+  beach:  { land: '#f0dfa6', dots: '#d9c281', bank: '#fbf0c9', water: '#35c4c9', rock: '#b79a63', rockLight: '#dcc48e' },
+  ice:    { land: '#eef4fb', dots: '#c9d8ea', bank: '#dbe8f6', water: '#2a6fb5', rock: '#cfe9ff', rockLight: '#ffffff' },
+  sewer:  { land: '#3a3d46', dots: '#2b2d34', bank: '#6b6e78', water: '#6cb33a', rock: '#8a8d99', rockLight: '#b4b8c4' },
+  lava:   { land: '#4b2b2b', dots: '#6a3a3a', bank: '#c75a2d', water: '#3f8f9f', rock: '#2f2f38', rockLight: '#5a5a66' },
+  jungle: { land: '#3f7d2e', dots: '#2f5f22', bank: '#8d6a3a', water: '#3a8f7a', rock: '#5f6370', rockLight: '#8c909c' },
+};
+
 // A course is a centreline of points with a half-width per point. The raft stays inside the channel.
 function makeLevels() {
   const levels = [];
@@ -295,6 +312,7 @@ function makeLevels() {
   // Course 2: sharper turns, two logs, a whirlpool in a wide pool.
   levels.push({
     name: 'Course 2 · Toot Canyon',
+    theme: THEMES.canyon,
     path: [
       [0, 0, 6], [0, -16, 5], [-10, -30, 4], [-8, -46, 3.6], [8, -56, 4], [24, -52, 4.4], [30, -38, 3.4],
       [40, -26, 5], [58, -22, 7.5], [76, -30, 7.5], [88, -46, 4], [84, -64, 3.6], [96, -80, 4], [116, -84, 5],
@@ -307,6 +325,7 @@ function makeLevels() {
   // Course 3: a long squeeze then a slalom of rocks.
   levels.push({
     name: 'Course 3 · The Big Squeeze',
+    theme: THEMES.forest,
     path: [
       [0, 0, 6], [0, -14, 5], [-6, -28, 3.2], [-6, -44, 3.0], [0, -58, 3.2], [12, -66, 4], [28, -66, 5.5],
       [44, -62, 5.5], [58, -52, 5.5], [66, -36, 5], [80, -24, 5], [98, -22, 6], [114, -32, 6], [122, -50, 6],
@@ -315,6 +334,87 @@ function makeLevels() {
     logs: [{ at: 0.2, span: 1.6, speed: 1.6, len: 2.2 }, { at: 0.72, span: 2.6, speed: 1.2, len: 3.2 }],
     whirls: [{ at: 0.9, r: 6, pull: 3.8, spin: 3 }],
     checkpoints: [0.28, 0.5, 0.75],
+  });
+  // Course 4: a wide, sunny lagoon where rows of ducks paddle across the channel.
+  levels.push({
+    name: 'Course 4 · Duck Bay',
+    theme: THEMES.beach,
+    path: [
+      [0, 0, 7], [0, -20, 7], [10, -38, 6.5], [28, -48, 6], [48, -48, 8], [68, -40, 8], [84, -26, 6],
+      [100, -20, 6], [118, -28, 5.5], [130, -44, 5.5], [136, -62, 6],
+    ],
+    rocks: [[48, -54, 1.3], [66, -34, 1.2], [118, -33, 1.0]],
+    logs: [
+      { at: 0.22, span: 3.6, speed: 0.9, len: 3.6, ducks: true }, { at: 0.47, span: 5, speed: 0.7, len: 4.2, ducks: true },
+      { at: 0.66, span: 3.2, speed: 1.3, len: 3.0, ducks: true }, { at: 0.86, span: 3, speed: 1.0, len: 3.4, ducks: true },
+    ],
+    whirls: [],
+    checkpoints: [0.35, 0.68],
+  });
+  // Course 5: ice water with almost no drag, so the raft keeps sliding into every bend.
+  levels.push({
+    name: 'Course 5 · Frostbottom Fjord',
+    theme: THEMES.ice,
+    drag: 0.5,
+    path: [
+      [0, 0, 6], [0, -16, 5.5], [-12, -30, 5], [-30, -36, 4.6], [-46, -30, 4.6], [-54, -16, 4.4], [-66, -8, 4.4],
+      [-84, -14, 4.6], [-96, -30, 4.4], [-112, -40, 4.6], [-130, -36, 5], [-142, -22, 5.5], [-150, -6, 6],
+    ],
+    rocks: [[-30, -40, 1.3], [-66, -5, 1.1], [-112, -44, 1.2], [-128, -34, 1.0]],
+    logs: [{ at: 0.5, span: 2.4, speed: 0.9, len: 3.0 }],
+    whirls: [],
+    checkpoints: [0.3, 0.58, 0.82],
+  });
+  // Course 6: a tight zigzag tunnel with pillars in the channel and fast currents down the drops.
+  levels.push({
+    name: 'Course 6 · Stinky Sewer',
+    theme: THEMES.sewer,
+    path: [
+      [0, 0, 5], [0, -14, 4.4], [12, -24, 3.8], [28, -24, 3.8], [38, -36, 3.6], [38, -52, 3.6], [50, -64, 4],
+      [68, -64, 4], [80, -52, 3.8], [80, -36, 3.8], [94, -24, 4.4], [112, -24, 4.4], [124, -36, 4.6], [124, -54, 5],
+    ],
+    rocks: [[20, -24, 0.7], [39.2, -44, 0.6], [59, -66.5, 0.7], [104, -22.5, 0.7]],
+    logs: [],
+    whirls: [{ at: 0.92, r: 5, pull: 3, spin: 2.6 }],
+    rapids: [{ at: 0.26, len: 0.09, strength: 3 }, { at: 0.6, len: 0.08, strength: 3.5 }],
+    checkpoints: [0.27, 0.52, 0.77],
+  });
+  // Course 7: hot springs between lava rocks; geysers on the banks blast the raft across the channel.
+  levels.push({
+    name: 'Course 7 · Volcano Vent',
+    theme: THEMES.lava,
+    path: [
+      [0, 0, 6], [0, -18, 5.5], [8, -34, 5], [22, -42, 5], [38, -40, 4.6], [50, -28, 4.6], [64, -20, 5],
+      [80, -24, 5], [92, -38, 4.6], [100, -56, 4.6], [114, -66, 5], [132, -64, 5.5], [144, -50, 6],
+    ],
+    rocks: [[38, -45, 1.1], [64, -16, 1.0], [100, -51, 1.0]],
+    logs: [],
+    whirls: [{ at: 0.62, r: 5, pull: 3, spin: 2.8 }],
+    geysers: [
+      { at: 0.18, side: 1, period: 3.2, phase: 0 }, { at: 0.36, side: -1, period: 2.8, phase: 1.1 },
+      { at: 0.52, side: 1, period: 3.0, phase: 0.5 }, { at: 0.7, side: -1, period: 2.6, phase: 1.8 },
+      { at: 0.84, side: 1, period: 3.4, phase: 0.9 },
+    ],
+    checkpoints: [0.3, 0.58, 0.8],
+  });
+  // Course 8: the long finale with everything at once: logs, ducks, pillars, a whirlpool, geysers and a current.
+  levels.push({
+    name: 'Course 8 · Gas Gauntlet',
+    theme: THEMES.jungle,
+    path: [
+      [0, 0, 6], [0, -16, 5], [10, -30, 4.4], [26, -36, 4.4], [42, -30, 4], [52, -16, 4], [66, -8, 4.4], [84, -12, 5],
+      [96, -26, 6], [98, -46, 7], [112, -62, 7], [132, -66, 5], [148, -58, 4.4], [156, -42, 4.4], [170, -30, 5],
+      [188, -28, 5.5], [202, -40, 6], [206, -58, 6],
+    ],
+    rocks: [[26, -41, 0.9], [42, -26, 0.9], [112, -56, 1.4], [104, -60, 1.2], [150, -62, 0.9], [188, -33, 1.0]],
+    logs: [
+      { at: 0.14, span: 2.2, speed: 1.5, len: 2.6 }, { at: 0.58, span: 4, speed: 1.0, len: 3.6, ducks: true },
+      { at: 0.9, span: 2.8, speed: 1.3, len: 3.2 },
+    ],
+    whirls: [{ at: 0.46, r: 6.5, pull: 3.6, spin: 3 }],
+    geysers: [{ at: 0.3, side: -1, period: 3, phase: 0 }, { at: 0.74, side: 1, period: 2.8, phase: 1.3 }],
+    rapids: [{ at: 0.66, len: 0.08, strength: 3 }],
+    checkpoints: [0.22, 0.42, 0.62, 0.82],
   });
   for (const lv of levels) prepareLevel(lv);
   return levels;
@@ -333,7 +433,21 @@ function prepareLevel(lv) {
   lv.checkpointPts = lv.checkpoints.map((t) => pointAt(lv, t));
   for (const log of lv.logs) Object.assign(log, pointAt(lv, log.at));
   for (const w of lv.whirls) Object.assign(w, pointAt(lv, w.at));
+  lv.theme = lv.theme || THEMES.meadow;
+  lv.drag = lv.drag || 1;
+  lv.rapids = lv.rapids || [];
+  lv.geysers = lv.geysers || [];
+  for (const g of lv.geysers) {
+    // the crater sits on the bank and blasts toward the far bank; the blast reaches right across the channel
+    const p = pointAt(lv, g.at);
+    g.x = p.x + p.nx * g.side * (p.w + 0.3); g.y = p.y + p.ny * g.side * (p.w + 0.3);
+    g.dx = -p.nx * g.side; g.dy = -p.ny * g.side;
+    g.r = p.w * 2 + 0.5; g.strength = g.strength || 8; g.phase = g.phase || 0;
+  }
 }
+
+const GEYSER_ON = 0.7;
+function geyserActive(g, time) { return ((time + g.phase) % g.period) < GEYSER_ON; }
 
 function pointAt(lv, t) {
   const target = t * lv.length;
@@ -446,6 +560,21 @@ function stepSim(sim, inputs, dt) {
     if (s.started) { const k = BURST / THRUST; r.vx += wx * k; r.vy += wy * k; r.va += tq * k; }
   }
   r.vx += fx * dt; r.vy += fy * dt; r.va += torque * dt;
+  // geysers shove the raft toward the far bank while they blow
+  for (const g of lv.geysers) {
+    if (!geyserActive(g, sim.time)) continue;
+    const k = Math.max(0, 1 - Math.hypot(g.x - r.x, g.y - r.y) / g.r);
+    r.vx += g.dx * g.strength * k * dt; r.vy += g.dy * g.strength * k * dt;
+  }
+  // rapids carry the raft along the channel
+  if (lv.rapids.length) {
+    const q0 = channelQuery(lv, r.x, r.y);
+    for (const rp of lv.rapids) {
+      if (q0.progress < rp.at || q0.progress > rp.at + rp.len) continue;
+      const p = pointAt(lv, q0.progress);
+      r.vx += p.tx * rp.strength * dt; r.vy += p.ty * rp.strength * dt;
+    }
+  }
   // whirlpools
   for (const w of lv.whirls) {
     const dx = w.x - r.x, dy = w.y - r.y, d = Math.hypot(dx, dy);
@@ -457,7 +586,7 @@ function stepSim(sim, inputs, dt) {
     }
   }
   // drag
-  const drag = Math.exp(-LINEAR_DRAG * dt), adrag = Math.exp(-ANGULAR_DRAG * dt);
+  const drag = Math.exp(-LINEAR_DRAG * lv.drag * dt), adrag = Math.exp(-ANGULAR_DRAG * dt);
   r.vx *= drag; r.vy *= drag; r.va *= adrag;
   r.x += r.vx * dt; r.y += r.vy * dt; r.a += r.va * dt;
 
@@ -597,7 +726,7 @@ function spawnFart(x, y, dx, dy, big) {
     const sp = 2 + Math.random() * 2.5 + (big ? 2 : 0);
     particles.push({
       x, y, vx: (dx + spread * dy) * sp, vy: (dy - spread * dx) * sp,
-      life: 0.6 + Math.random() * 0.5, age: 0, r: 0.25 + Math.random() * 0.3, kind: 'gas',
+      life: 0.6 + Math.random() * 0.5, age: 0, r: 0.25 + Math.random() * 0.3, kind: 'gas', tint: Math.random() < 0.5 ? '168,230,61' : '214,245,120',
     });
   }
 }
@@ -624,9 +753,9 @@ function drawWorld(view, now) {
   const lv = LEVELS[view.level];
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   // land
-  ctx.fillStyle = '#7cc24a';
+  ctx.fillStyle = lv.theme.land;
   ctx.fillRect(0, 0, W, H);
-  const targetZoom = Math.min(W, H) / 26;
+  const targetZoom = Math.min(W, H) / 19;
   if (!cam.initialised) { cam.x = view.raft.x; cam.y = view.raft.y; cam.zoom = targetZoom; cam.initialised = true; }
   cam.x += (view.raft.x + view.raft.vx * 0.15 - cam.x) * 0.12;
   cam.y += (view.raft.y + view.raft.vy * 0.15 - cam.y) * 0.12;
@@ -636,7 +765,7 @@ function drawWorld(view, now) {
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
   // grass texture: sparse dots in a grid (world-stable)
-  ctx.fillStyle = '#5a9a35';
+  ctx.fillStyle = lv.theme.dots;
   const gx0 = Math.floor((cam.x - W / cam.zoom) / 4) * 4, gy0 = Math.floor((cam.y - H / cam.zoom) / 4) * 4;
   for (let x = gx0; x < cam.x + W / cam.zoom; x += 4) for (let y = gy0; y < cam.y + H / cam.zoom; y += 4) {
     const h = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453; const f = h - Math.floor(h);
@@ -644,9 +773,9 @@ function drawWorld(view, now) {
   }
 
   // channel: bank stroke then water fill
-  drawChannel(lv, 1.1, '#5a9a35');
-  drawChannel(lv, 0.55, '#d9b36a');
-  drawChannel(lv, 0, '#2d8fd5');
+  drawChannel(lv, 1.1, lv.theme.dots);
+  drawChannel(lv, 0.55, lv.theme.bank);
+  drawChannel(lv, 0, lv.theme.water);
 
   // water ripples
   ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 0.12;
@@ -655,6 +784,20 @@ function drawWorld(view, now) {
     for (let k = 0; k < 3; k++) {
       const ox = Math.sin(now * 0.8 + i * 1.7 + k * 2.1) * pw * 0.5, oy = Math.cos(now * 0.6 + i * 1.3 + k * 1.9) * pw * 0.5;
       ctx.beginPath(); ctx.moveTo(px + ox - 0.6, py + oy); ctx.quadraticCurveTo(px + ox, py + oy - 0.25, px + ox + 0.6, py + oy); ctx.stroke();
+    }
+  }
+
+  // rapids: chevrons drifting downstream
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 0.16;
+  for (const rp of lv.rapids) {
+    const L = rp.len * lv.length, count = Math.floor(L / 1.6);
+    for (let i = 0; i < count; i++) {
+      const p = pointAt(lv, rp.at + ((i * 1.6 + now * 4) % L) / lv.length);
+      for (let k = -1; k <= 1; k++) {
+        const cx = p.x + p.nx * k * p.w * 0.45, cy = p.y + p.ny * k * p.w * 0.45;
+        ctx.beginPath(); ctx.moveTo(cx - p.tx * 0.5 - p.nx * 0.5, cy - p.ty * 0.5 - p.ny * 0.5); ctx.lineTo(cx + p.tx * 0.3, cy + p.ty * 0.3);
+        ctx.lineTo(cx - p.tx * 0.5 + p.nx * 0.5, cy - p.ty * 0.5 + p.ny * 0.5); ctx.stroke();
+      }
     }
   }
 
@@ -676,13 +819,35 @@ function drawWorld(view, now) {
 
   // rocks
   for (const [rx, ry, rr] of lv.rocks) {
-    ctx.fillStyle = '#6b6e78'; ctx.beginPath(); ctx.arc(rx, ry, rr, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#9a9ea8'; ctx.beginPath(); ctx.arc(rx - rr * 0.25, ry - rr * 0.3, rr * 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = lv.theme.rock; ctx.beginPath(); ctx.arc(rx, ry, rr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = lv.theme.rockLight; ctx.beginPath(); ctx.arc(rx - rr * 0.25, ry - rr * 0.3, rr * 0.5, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.12; ctx.beginPath(); ctx.arc(rx, ry, rr, 0, Math.PI * 2); ctx.stroke();
   }
-  // logs
+  // geysers: a crater on the bank that bubbles before it blows
+  for (const g of lv.geysers) {
+    const t = (view.time + g.phase) % g.period, on = t < GEYSER_ON, soon = t > g.period - 0.6;
+    ctx.fillStyle = lv.theme.rock; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.12;
+    ctx.beginPath(); ctx.arc(g.x, g.y, 1.1, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = on ? '#ffffff' : soon ? '#9fdcff' : lv.theme.water; ctx.beginPath(); ctx.arc(g.x, g.y, 0.6, 0, Math.PI * 2); ctx.fill();
+    if (soon) {
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      for (let k = 0; k < 3; k++) { const a = now * 9 + k * 2.1; ctx.beginPath(); ctx.arc(g.x + Math.cos(a) * 0.35, g.y + Math.sin(a) * 0.35, 0.1 + 0.05 * Math.sin(now * 20 + k), 0, Math.PI * 2); ctx.fill(); }
+    }
+    if (on) {
+      const len = g.r * 0.9 * Math.min(1, t / 0.15);
+      ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(Math.atan2(g.dy, g.dx));
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.beginPath(); ctx.moveTo(0, -0.5); ctx.quadraticCurveTo(len * 0.5, -1.4 - Math.sin(now * 30) * 0.2, len, -0.3); ctx.lineTo(len, 0.3);
+      ctx.quadraticCurveTo(len * 0.5, 1.4 + Math.sin(now * 30) * 0.2, 0, 0.5); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 0.1;
+      for (let k = 0; k < 4; k++) { const f = (now * 6 + k * 0.25) % 1; ctx.beginPath(); ctx.arc(len * f, (k - 1.5) * 0.35 * f, 0.18 + f * 0.25, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.restore();
+    }
+  }
+  // logs and duck rows
   for (const log of lv.logs) {
     const p = logPosition(log, view.time);
+    if (log.ducks) { drawDucks(p, log, view.time); continue; }
     ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(Math.atan2(p.ty, p.tx));
     ctx.fillStyle = '#8d5a28'; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.12;
     roundRect(-p.len / 2, -0.45, p.len, 0.9, 0.45); ctx.fill(); ctx.stroke();
@@ -695,44 +860,21 @@ function drawWorld(view, now) {
   // particles under raft (splash) and gas
   for (const p of particles) {
     const k = 1 - p.age / p.life;
-    if (p.kind === 'gas') { ctx.fillStyle = `rgba(168,230,61,${0.55 * k})`; }
-    else { ctx.fillStyle = `rgba(255,255,255,${0.8 * k})`; }
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    if (p.kind === 'gas') {
+      ctx.fillStyle = `rgba(${p.tint},${0.6 * k})`; ctx.fill();
+      ctx.strokeStyle = `rgba(60,110,20,${0.45 * k})`; ctx.lineWidth = 0.05; ctx.stroke();
+    } else { ctx.fillStyle = `rgba(255,255,255,${0.8 * k})`; ctx.fill(); }
   }
 
   // raft
   const r = view.raft;
   ctx.save(); ctx.translate(r.x, r.y); ctx.rotate(r.a);
   if (view.phase === 'sunk') { const k = Math.min(1, (view.time - view.sunkAt) / 1.5); ctx.scale(1 - k * 0.6, 1 - k * 0.6); ctx.globalAlpha = 1 - k * 0.8; ctx.rotate(k * 2); }
-  ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.arc(0.15, 0.2, RAFT_RADIUS, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = '#c88a4a'; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.14;
-  roundRect(-RAFT_HALF * 1.1, -RAFT_HALF * 1.1, RAFT_HALF * 2.2, RAFT_HALF * 2.2, 0.35); ctx.fill(); ctx.stroke();
-  ctx.strokeStyle = '#8d5a28'; ctx.lineWidth = 0.08;
-  for (let k = -0.7; k <= 0.75; k += 0.37) { ctx.beginPath(); ctx.moveTo(k, -RAFT_HALF * 1.05); ctx.lineTo(k, RAFT_HALF * 1.05); ctx.stroke(); }
-  // bow marker
-  ctx.fillStyle = '#ff7a3d'; ctx.beginPath(); ctx.moveTo(-0.35, -RAFT_HALF * 1.1); ctx.lineTo(0.35, -RAFT_HALF * 1.1); ctx.lineTo(0, -RAFT_HALF * 1.55); ctx.closePath(); ctx.fill(); ctx.stroke();
-  // seats & players
-  for (let i = 0; i < 4; i++) {
-    const [lx, ly] = SEAT_LOCAL[i];
-    const sx = lx * RAFT_HALF * 0.85, sy = ly * RAFT_HALF * 0.85;
-    const s = view.seats[i];
-    if (!s) { ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.arc(sx, sy, 0.33, 0, Math.PI * 2); ctx.fill(); continue; }
-    const squish = s.fart ? 0.85 : 1;
-    ctx.save(); ctx.translate(sx, sy); ctx.scale(1, squish);
-    ctx.fillStyle = s.colour; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.1;
-    ctx.beginPath(); ctx.arc(0, 0, 0.42, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    // face toward the bow
-    const fy = -0.1;
-    ctx.fillStyle = '#1b1b2a';
-    ctx.beginPath(); ctx.arc(-0.14, fy, 0.06, 0, Math.PI * 2); ctx.arc(0.14, fy, 0.06, 0, Math.PI * 2); ctx.fill();
-    ctx.lineWidth = 0.06; ctx.beginPath();
-    if (s.fart) { ctx.arc(0, fy + 0.18, 0.1, 0, Math.PI * 2); } else { ctx.arc(0, fy + 0.1, 0.13, 0.2, Math.PI - 0.2); }
-    ctx.stroke();
-    ctx.restore();
-  }
+  drawRaft(view.seats, now);
   ctx.restore();
 
-  // name tags above players (screen-aligned)
+  // name tags beside the raft (screen-aligned); a farting player's tag fills with their colour
   ctx.font = `bold ${0.34}px Nunito, sans-serif`; ctx.textBaseline = 'middle';
   for (let i = 0; i < 4; i++) {
     const s = view.seats[i]; if (!s) continue;
@@ -740,10 +882,17 @@ function drawWorld(view, now) {
     const sx = lx * RAFT_HALF * 0.85, sy = ly * RAFT_HALF * 0.85;
     const wx = r.x + sx * Math.cos(r.a) - sy * Math.sin(r.a), wy = r.y + sx * Math.sin(r.a) + sy * Math.cos(r.a);
     // tags sit beside the raft on the player's side so two names never overlap
-    const side = wx >= r.x ? 1 : -1;
+    const side = wx >= r.x ? 1 : -1, tx = r.x + side * 1.85;
     ctx.textAlign = side > 0 ? 'left' : 'right';
-    ctx.lineWidth = 0.1; ctx.strokeStyle = '#1b1b2a'; ctx.fillStyle = '#fff';
-    ctx.strokeText(s.name, r.x + side * 1.75, wy); ctx.fillText(s.name, r.x + side * 1.75, wy);
+    if (s.fart) {
+      const tw = ctx.measureText(s.name).width;
+      ctx.fillStyle = s.colour; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.06;
+      roundRect(side > 0 ? tx - 0.14 : tx - tw - 0.14, wy - 0.26, tw + 0.28, 0.52, 0.26); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#1b1b2a'; ctx.fillText(s.name, tx, wy);
+    } else {
+      ctx.lineWidth = 0.1; ctx.strokeStyle = '#1b1b2a'; ctx.fillStyle = '#fff';
+      ctx.strokeText(s.name, tx, wy); ctx.fillText(s.name, tx, wy);
+    }
   }
 
   // waypoint arrow toward the next bit of river
@@ -757,6 +906,122 @@ function drawWorld(view, now) {
     ctx.restore();
   }
   ctx.restore();
+}
+
+// ---------- raft art ----------
+const TUBE = 0.48;
+// Draws the raft at the origin in raft-local units (bow is -y). Shared by the game view and the title screen.
+function drawRaft(seats, now) {
+  const ringR = RAFT_RADIUS - TUBE / 2;
+  ctx.save();
+  ctx.lineCap = 'butt'; ctx.lineJoin = 'round';
+  ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.arc(0.12, 0.18, RAFT_RADIUS, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2a7fc4'; ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.2)'; ctx.beginPath(); ctx.ellipse(-0.12, -0.08, 0.38, 0.18, -0.7, 0, Math.PI * 2); ctx.fill();
+  // the inflatable tube: dark rim, yellow base, red segments, seams, gloss
+  ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = TUBE + 0.14; ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = '#ffc233'; ctx.lineWidth = TUBE; ctx.beginPath(); ctx.arc(0, 0, ringR, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = '#ff5a3d';
+  for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 8; ctx.beginPath(); ctx.arc(0, 0, ringR, a, a + Math.PI / 4); ctx.stroke(); }
+  ctx.strokeStyle = 'rgba(27,27,42,0.45)'; ctx.lineWidth = 0.05;
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4 + Math.PI / 8, c = Math.cos(a), s = Math.sin(a);
+    ctx.beginPath(); ctx.moveTo(c * (ringR - TUBE / 2), s * (ringR - TUBE / 2)); ctx.lineTo(c * RAFT_RADIUS, s * RAFT_RADIUS); ctx.stroke();
+  }
+  ctx.lineCap = 'round'; ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 0.09;
+  ctx.beginPath(); ctx.arc(0, 0, ringR + 0.1, -Math.PI * 0.92, -Math.PI * 0.62); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, ringR + 0.1, -Math.PI * 0.46, -Math.PI * 0.32); ctx.stroke();
+  // rope handles on both sides and the stern
+  for (let k = 0; k < 3; k++) {
+    const a = k * Math.PI / 2, hx = Math.cos(a) * (RAFT_RADIUS - 0.04), hy = Math.sin(a) * (RAFT_RADIUS - 0.04);
+    ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.12; ctx.beginPath(); ctx.arc(hx, hy, 0.17, a - 1.4, a + 1.4); ctx.stroke();
+    ctx.strokeStyle = '#f6e7c1'; ctx.lineWidth = 0.05; ctx.beginPath(); ctx.arc(hx, hy, 0.17, a - 1.4, a + 1.4); ctx.stroke();
+  }
+  // bow pennant
+  const flap = Math.sin(now * 8) * 0.07;
+  ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.07;
+  ctx.beginPath(); ctx.moveTo(0, -RAFT_RADIUS + 0.1); ctx.lineTo(0, -RAFT_RADIUS - 0.62); ctx.stroke();
+  ctx.fillStyle = '#a8e63d'; ctx.lineWidth = 0.06;
+  ctx.beginPath(); ctx.moveTo(0.03, -RAFT_RADIUS - 0.62); ctx.lineTo(0.58, -RAFT_RADIUS - 0.45 + flap); ctx.lineTo(0.03, -RAFT_RADIUS - 0.27); ctx.closePath(); ctx.fill(); ctx.stroke();
+  // riders: resting ones first so a farting rider's glow sits on top
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < 4; i++) {
+      const [lx, ly] = SEAT_LOCAL[i];
+      const sx = lx * RAFT_HALF * 0.85, sy = ly * RAFT_HALF * 0.85;
+      const s = seats[i];
+      if (!s) {
+        if (pass) continue;
+        ctx.setLineDash([0.12, 0.1]); ctx.strokeStyle = 'rgba(27,27,42,0.35)'; ctx.lineWidth = 0.06;
+        ctx.beginPath(); ctx.arc(sx, sy, 0.34, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+        continue;
+      }
+      if (!!s.fart !== !!pass) continue;
+      drawRider(sx, sy, s, SEAT_FART_DIR[i][1], now, i);
+    }
+  }
+  ctx.restore();
+}
+
+function drawRider(x, y, s, gy, now, i) {
+  ctx.save(); ctx.translate(x, y);
+  if (s.fart) {
+    // green halo plus wobbling stink lines behind the seat, so everyone can see who is farting
+    const pulse = 0.5 + 0.5 * Math.sin(now * 14 + i);
+    const g = ctx.createRadialGradient(0, 0, 0.35, 0, 0, 0.85 + pulse * 0.2);
+    g.addColorStop(0, 'rgba(168,230,61,0.8)'); g.addColorStop(1, 'rgba(168,230,61,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 1.1, 0, Math.PI * 2); ctx.fill();
+    ctx.lineCap = 'round';
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.strokeStyle = pass ? '#a8e63d' : '#1b1b2a'; ctx.lineWidth = pass ? 0.07 : 0.15;
+      for (let k = -1; k <= 1; k++) {
+        ctx.beginPath(); ctx.moveTo(k * 0.24, gy * 0.42);
+        for (let t = 1; t <= 4; t++) ctx.lineTo(k * 0.24 + Math.sin(now * 22 + t * 1.7 + k * 2) * 0.09, gy * (0.42 + t * 0.15));
+        ctx.stroke();
+      }
+    }
+    ctx.translate(Math.sin(now * 40 + i) * 0.035, -0.05 + Math.sin(now * 26) * 0.04);
+    ctx.scale(1.08, 0.92);
+  } else {
+    ctx.scale(1, 1 + Math.sin(now * 3 + i * 1.3) * 0.02);
+  }
+  ctx.fillStyle = s.colour; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.1;
+  ctx.beginPath(); ctx.arc(0, 0, 0.46, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(-0.17, -0.2, 0.15, 0.08, -0.7, 0, Math.PI * 2); ctx.fill();
+  const fy = -0.08;
+  ctx.lineCap = 'round';
+  if (s.fart) {
+    // eyes squeezed shut, cheeks puffed, mouth wide open
+    ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.07;
+    ctx.beginPath(); ctx.arc(-0.16, fy + 0.03, 0.09, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0.16, fy + 0.03, 0.09, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,80,80,0.75)'; ctx.beginPath(); ctx.arc(-0.3, fy + 0.14, 0.1, 0, Math.PI * 2); ctx.arc(0.3, fy + 0.14, 0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1b1b2a'; ctx.beginPath(); ctx.ellipse(0, fy + 0.22, 0.11, 0.13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ff6b8a'; ctx.beginPath(); ctx.ellipse(0, fy + 0.29, 0.06, 0.05, 0, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-0.15, fy, 0.11, 0, Math.PI * 2); ctx.arc(0.15, fy, 0.11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1b1b2a'; ctx.beginPath(); ctx.arc(-0.13, fy + 0.02, 0.055, 0, Math.PI * 2); ctx.arc(0.17, fy + 0.02, 0.055, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.06;
+    ctx.beginPath(); ctx.arc(0, fy + 0.1, 0.15, 0.25, Math.PI - 0.25); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,120,120,0.45)'; ctx.beginPath(); ctx.arc(-0.3, fy + 0.14, 0.07, 0, Math.PI * 2); ctx.arc(0.3, fy + 0.14, 0.07, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawDucks(p, log, time) {
+  const n = Math.max(2, Math.round(p.len / 0.9));
+  // ducks face the way they are paddling across the river
+  const dir = Math.cos(time * log.speed) >= 0 ? 1 : -1;
+  const heading = Math.atan2(log.ny * dir, log.nx * dir);
+  for (let i = 0; i < n; i++) {
+    const f = -0.5 + i / (n - 1), x = p.x + p.tx * f * p.len, y = p.y + p.ty * f * p.len, bob = Math.sin(time * 6 + i) * 0.04;
+    ctx.save(); ctx.translate(x, y + bob); ctx.rotate(heading);
+    ctx.fillStyle = '#ffd23f'; ctx.strokeStyle = '#1b1b2a'; ctx.lineWidth = 0.08;
+    ctx.beginPath(); ctx.ellipse(-0.05, 0, 0.42, 0.32, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0.3, -0.18, 0.22, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ff8a3d'; ctx.beginPath(); ctx.moveTo(0.48, -0.2); ctx.lineTo(0.7, -0.14); ctx.lineTo(0.48, -0.08); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#1b1b2a'; ctx.beginPath(); ctx.arc(0.36, -0.22, 0.04, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
 }
 
 function drawChannel(lv, extra, colour) {
@@ -874,15 +1139,23 @@ const clientConns = new Map(); // host: peer id -> {conn, n, c, f}
 let roomCode = '';
 let mySeatHint = -1;
 const seatFartPrev = [false, false, false, false];
+const geyserPrev = [];
 const snaps = []; // client interpolation buffer: {at, snap}
 let clientSunkAt = 0;
 
 let solo = false;
+// ---------- course picker ----------
+const levelPick = $('level-pick');
+LEVELS.forEach((lv, i) => { const o = document.createElement('option'); o.value = String(i); o.textContent = lv.name; levelPick.appendChild(o); });
+try { const saved = parseInt(localStorage.getItem('gasraft-level'), 10); if (saved >= 0 && saved < LEVELS.length) levelPick.value = String(saved); } catch (e) {}
+levelPick.addEventListener('change', () => { try { localStorage.setItem('gasraft-level', levelPick.value); } catch (e) {} });
+function pickedLevel() { const n = parseInt(levelPick.value, 10); return n >= 0 && n < LEVELS.length ? n : 0; }
+
 function startCouch(players) {
   audio.ensure();
   mode = 'couch';
   solo = players === 1;
-  sim = newSim(0);
+  sim = newSim(pickedLevel());
   if (solo) {
     // one person works both back seats, so the raft steers like a two-key tank: left key, right key, both for straight
     for (let i = 0; i < 2; i++) sim.seats[i] = { id: 'local' + i, name: myName(), colour: COLOURS[prefs.colour % COLOURS.length], fart: false, gas: 1 };
@@ -894,7 +1167,7 @@ function startCouch(players) {
   showScreen(null);
   cam.initialised = false;
   $('hud-hint').innerHTML = solo ? '<kbd>←</kbd> left · <kbd>→</kbd> right · both for straight' : players <= 2 ? '<kbd>A</kbd> back left · <kbd>L</kbd> back right' : '<kbd>A</kbd> <kbd>L</kbd> back · <kbd>Q</kbd> <kbd>P</kbd> front';
-  toast(LEVELS[0].name, 2200);
+  toast(LEVELS[sim.level].name, 2200);
 }
 
 function couchInputs() {
@@ -927,7 +1200,7 @@ function hostGame(attempt = 0) {
   peer = new Peer('gasraft-' + roomCode.toLowerCase(), peerOptions());
   peer.on('open', () => {
     mode = 'host';
-    sim = newSim(0);
+    sim = newSim(pickedLevel());
     setupTouchZones(1);
     showScreen('lobby');
     $('lobby-code').textContent = roomCode;
@@ -1155,6 +1428,7 @@ function frame(now) {
     }
     seatFartPrev[i] = farting;
   }
+  LEVELS[view.level].geysers.forEach((g, i) => { const on = geyserActive(g, view.time); if (on && !geyserPrev[i]) spawnSplash(g.x + g.dx * 0.8, g.y + g.dy * 0.8, 1.2); geyserPrev[i] = on; });
   stepParticles(dt);
   drawWorld(view, now / 1000);
   renderHud();
@@ -1179,6 +1453,10 @@ function showResult() {
   showScreen('result');
 }
 
+const TITLE_CREW = [
+  { name: 'Toot', colour: COLOURS[0] }, { name: 'Parp', colour: COLOURS[2] }, { name: 'Whiff', colour: COLOURS[1] }, { name: 'Boom', colour: COLOURS[3] },
+];
+
 function drawTitleBackdrop(now) {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = '#2d8fd5'; ctx.fillRect(0, 0, W, H);
@@ -1188,6 +1466,14 @@ function drawTitleBackdrop(now) {
     ctx.beginPath();
     for (let x = -40; x <= W + 40; x += 20) ctx.lineTo(x, y + Math.sin((x + now * 60) / 45 + i) * 6);
     ctx.stroke();
+  }
+
+  // demo rafts bobbing around the menu card
+  const demo = TITLE_CREW.map((s, i) => ({ ...s, fart: Math.sin(now * 1.4 + i * 1.6) > 0.45 }));
+  const sc = Math.min(W, H) / 7.5;
+  for (const [fx, fy, rot] of [[0.16, 0.22, -0.4], [0.84, 0.78, 2.6]]) {
+    ctx.save(); ctx.translate(W * fx, H * fy + Math.sin(now * 1.7 + fx) * 6); ctx.scale(sc, sc); ctx.rotate(rot + Math.sin(now * 0.8 + fy) * 0.1);
+    drawRaft(demo, now); ctx.restore();
   }
 }
 
@@ -1220,7 +1506,7 @@ $('btn-retry').addEventListener('click', () => {
   status.textContent = 'Online ready. Host a game and share the code, or join a friend\u2019s.';
 })();
 
-window.__gasraft = { get sim() { return sim; }, get view() { return view; } };
+window.__gasraft = { get sim() { return sim; }, get view() { return view; }, LEVELS, newSim, stepSim, channelQuery, pointAt, logPosition, geyserActive, RAFT_RADIUS };
 requestAnimationFrame(frame);
 })();
 </script>
