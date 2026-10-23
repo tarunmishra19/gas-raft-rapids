@@ -201,7 +201,7 @@
       <div class="seg" id="colour-pick" role="group" aria-label="Colour"></div>
     </div>
     <hr style="border:0;border-top:3px dashed var(--ink);opacity:0.25;margin:4px 0">
-    <h2>Play together on this device</h2>
+    <h2>Play on this device</h2>
     <div class="row">
       <label>Players</label>
       <div class="seg" id="couch-count" role="group" aria-label="Player count">
@@ -210,8 +210,10 @@
         <button type="button" data-n="4" aria-pressed="false">4</button>
       </div>
       <button type="button" id="btn-couch">Start couch game</button>
+      <button type="button" id="btn-solo" class="secondary">Play solo</button>
     </div>
-    <p class="muted">One keyboard: <kbd>A</kbd> back left, <kbd>L</kbd> back right, <kbd>Q</kbd> front left, <kbd>P</kbd> front right. On a phone, each player taps their own part of the screen.</p>
+    <p class="muted">Couch game, one keyboard: <kbd>A</kbd> back left, <kbd>L</kbd> back right, <kbd>Q</kbd> front left, <kbd>P</kbd> front right. On a phone, each player holds their own part of the screen.</p>
+    <p class="muted">Solo, you work both back seats: <kbd>A</kbd> or <kbd>←</kbd> farts left, <kbd>L</kbd> or <kbd>→</kbd> farts right. Hold both to go straight. On a phone, hold the left or right half of the screen.</p>
     <h2>Play online</h2>
     <div class="row">
       <button type="button" id="btn-host" class="secondary" disabled>Host a game</button>
@@ -833,7 +835,7 @@ const keysDown = new Set();
 window.addEventListener('keydown', (e) => {
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
   const k = e.key.toLowerCase();
-  if (k === ' ' ) e.preventDefault();
+  if (k === ' ' || k === 'arrowleft' || k === 'arrowright') e.preventDefault();
   if (!keysDown.has(k)) { keysDown.add(k); audio.ensure(); }
 });
 window.addEventListener('keyup', (e) => keysDown.delete(e.key.toLowerCase()));
@@ -875,22 +877,30 @@ const seatFartPrev = [false, false, false, false];
 const snaps = []; // client interpolation buffer: {at, snap}
 let clientSunkAt = 0;
 
-function startCouch() {
+let solo = false;
+function startCouch(players) {
   audio.ensure();
   mode = 'couch';
+  solo = players === 1;
   sim = newSim(0);
-  for (let i = 0; i < couchCount; i++) sim.seats[i] = { id: 'local' + i, name: i === 0 ? myName() : `Player ${i + 1}`, colour: COLOURS[(prefs.colour + i) % COLOURS.length], fart: false, gas: 1 };
+  if (solo) {
+    // one person works both back seats, so the raft steers like a two-key tank: left key, right key, both for straight
+    for (let i = 0; i < 2; i++) sim.seats[i] = { id: 'local' + i, name: myName(), colour: COLOURS[prefs.colour % COLOURS.length], fart: false, gas: 1 };
+  } else {
+    for (let i = 0; i < players; i++) sim.seats[i] = { id: 'local' + i, name: i === 0 ? myName() : `Player ${i + 1}`, colour: COLOURS[(prefs.colour + i) % COLOURS.length], fart: false, gas: 1 };
+  }
   sim.phase = 'playing';
-  setupTouchZones(couchCount);
+  setupTouchZones(solo ? 2 : players);
   showScreen(null);
   cam.initialised = false;
-  $('hud-hint').innerHTML = couchCount <= 2 ? '<kbd>A</kbd> back left · <kbd>L</kbd> back right' : '<kbd>A</kbd> <kbd>L</kbd> back · <kbd>Q</kbd> <kbd>P</kbd> front';
+  $('hud-hint').innerHTML = solo ? '<kbd>←</kbd> left · <kbd>→</kbd> right · both for straight' : players <= 2 ? '<kbd>A</kbd> back left · <kbd>L</kbd> back right' : '<kbd>A</kbd> <kbd>L</kbd> back · <kbd>Q</kbd> <kbd>P</kbd> front';
   toast(LEVELS[0].name, 2200);
 }
 
 function couchInputs() {
   const out = [];
   for (let i = 0; i < 4; i++) out[i] = keysDown.has(SEAT_KEYS[i]) || !!touchDown.get(i);
+  if (solo) { out[0] = out[0] || keysDown.has('arrowleft'); out[1] = out[1] || keysDown.has('arrowright'); }
   return out;
 }
 
@@ -1182,7 +1192,8 @@ function drawTitleBackdrop(now) {
 }
 
 // ---------- buttons ----------
-$('btn-couch').addEventListener('click', startCouch);
+$('btn-couch').addEventListener('click', () => startCouch(couchCount));
+$('btn-solo').addEventListener('click', () => startCouch(1));
 $('btn-host').addEventListener('click', hostGame);
 $('btn-join').addEventListener('click', joinGame);
 $('join-code').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinGame(); });
